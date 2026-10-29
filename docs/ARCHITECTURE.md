@@ -12,7 +12,7 @@ The repository is organized as a unified monorepo to maintain strict contract sy
 /Users/apple/Upostit/
 ├── apps/
 │   ├── web/                # Next.js 14+ TypeScript dashboard (Admin, HR, Manager, Billing)
-│   └── mobile/             # React Native (Expo) / Flutter employee app (Punch, GPS, Selfie)
+│   └── mobile/             # Flutter (Android & iOS) Dart employee app (Punch, GPS, Selfie)
 ├── services/
 │   ├── api/                # FastAPI modular monolith application
 │   ├── workers/            # Celery asynchronous background tasks
@@ -20,8 +20,8 @@ The repository is organized as a unified monorepo to maintain strict contract sy
 ├── packages/
 │   └── contracts/          # Shared Pydantic / OpenAPI schema definitions and client SDKs
 ├── database/
-│   └── migrations/         # Alembic database migration scripts
-├── infra/                  # Docker Compose configurations, PgBouncer, Nginx, CI/CD
+│   └── migrations/         # Alembic database migration scripts (PostgreSQL/Supabase target)
+├── infra/                  # Docker Compose (Redis & MinIO only; Supabase DB is remote), PgBouncer, Nginx, CI/CD
 ├── tests/                  # Cross-cutting integration, security, and load tests
 ├── docs/                   # Engineering documentation, phase specs, and architecture records
 ├── PROJECT_CONTEXT.md      # Single source of truth for project state and phase tracking
@@ -36,8 +36,8 @@ The repository is organized as a unified monorepo to maintain strict contract sy
 ```mermaid
 graph TD
     subgraph Clients ["Client Applications"]
-        Web["Web Dashboard (Next.js)"]
-        Mobile["Employee Mobile App (Expo/Flutter)"]
+        Web["Web Dashboard (Next.js 14+)"]
+        Mobile["Employee Mobile App (Flutter - Android & iOS)"]
         EdgeDev["Edge Gateway / Biometric Terminals"]
     end
 
@@ -63,7 +63,7 @@ graph TD
 
     LB --> API
     API --> RLSMW
-    RLSMW -->|SQLAlchemy 2 Async + SET LOCAL app.tenant_id| SupabaseDB
+    RLSMW -->|SQLAlchemy 2 Async + asyncpg + SET LOCAL app.tenant_id| SupabaseDB
     API -->|Rate Limiting & Feature Entitlement Cache| Redis
     API -->|Dispatch Async Tasks| Redis
     Redis --> Celery
@@ -78,11 +78,15 @@ graph TD
 
 ### 3.1 Web & Mobile Clients to FastAPI
 - **Protocol**: HTTPS / RESTful JSON API.
+- **Client Frameworks**:
+  - **Web**: Next.js 14+ (App Router, TypeScript).
+  - **Mobile**: Flutter 3.x+ (Dart) targeting Android and iOS with clean feature-based architecture (`features/`, `core/`, `shared/`), environment-configured API base URL, and offline storage with idempotency tracking.
 - **Authentication**: Bearer JWT tokens in the `Authorization: Bearer <token>` header containing claims: `sub` (user_id), `tenant_id` (organization_id), `role` (`owner`, `admin`, `hr`, `manager`, `employee`).
 - **Idempotency**: All state-mutating requests (such as `POST /punches`) include a client-generated UUID header `X-Client-Event-Id` ensuring deterministic, duplicate-free execution during network retries.
 
 ### 3.2 FastAPI to Supabase PostgreSQL
-- **Connection Method**: Asynchronous connection pool using SQLAlchemy 2 with `asyncpg`.
+- **Connection Method**: Asynchronous connection pool using SQLAlchemy 2 with `asyncpg` directly to Supabase PostgreSQL.
+- **No Secondary Local PostgreSQL Container**: In Phase 1 and beyond, Supabase PostgreSQL is the sole primary database. Docker Compose only spins up supporting services (Redis and MinIO).
 - **Tenant Context Injection**: Every request operates inside a database transaction that sets the session-level tenant variable:
   ```sql
   SET LOCAL app.tenant_id = '<tenant_uuid_from_token>';
@@ -97,7 +101,7 @@ graph TD
   - Message broker for asynchronous task delivery.
 - **Celery Workers**:
   - Asynchronous CSV/Excel bulk employee imports with line-by-line validation reports.
-  - Multi-channel notification delivery (Expo Push, transactional emails, WhatsApp/SMS).
+  - Multi-channel notification delivery (Push notifications via FCM/APNs, transactional emails, WhatsApp/SMS).
   - Nightly and on-demand attendance session re-computations.
   - Heavy monthly payroll batch runs and PDF generation.
 - **MinIO / S3 Object Storage**:
@@ -119,7 +123,7 @@ graph TD
 | **Phase 9** | `leave_types`, `leave_balances`, `leave_requests`, `holiday_calendars`, `overtime_rules` | Time-off entitlement balances, holiday schedules, overtime multiplier rules. |
 | **Phase 10** | `notification_templates`, `notification_preferences`, `notifications` | Multi-channel alert dispatching, quiet hours, audit delivery log. |
 | **Phase 11** | `plans`, `plan_features`, `subscriptions`, `usage_counters`, `invoices`, `payment_events` | Stripe/Razorpay billing, subscription state machine, automated entitlement gating. |
-| **Phase 12** | `api_keys`, `webhooks`, `webhook_deliveries`, `support_sessions`, `data_requests` | Developer API credentials, signed webhooks, customer support impersonation. |
+| **Phase 12** | `api_keys`, `webhooks`, `webhook_deliveries`, `support_sessions`, `data_requests` | Developer API access and external webhook subscriptions. |
 | **Phase 14** | `salary_structures`, `pay_components`, `pay_periods`, `payroll_runs`, `payroll_items`, `payslips` | Configurable payroll rules, locked pay runs, PDF payslips. |
 | **Phase 15** | `terminal_devices`, `device_credentials`, `biometric_enrolments`, `consent_records` | On-premise biometric hardware registry, HMAC authentication, face template consent. |
 | **Phase 16** | Edge gateway durable queue tables (SQLite on edge) | Local buffering of camera attendance events during site network outages. |
@@ -149,4 +153,4 @@ flowchart TD
 3. **Selfie & Liveness Verification**: Front-camera selfie captured upon punch, analyzed for liveness, and matched against enrolled profile.
 4. **Impossible Travel & Velocity Analysis**: Identifies geographically impossible transit times between successive punch events.
 5. **Server Clock Authority**: Discrepancies between client device clock and authoritative UTC server clock exceeding 120 seconds are automatically flagged.
-6. **Random In-Shift Presence Challenges**: Configurable mid-shift verification challenges sent to mobile app to prevent "phone left at desk" fraud.
+6. **Random In-Shift Presence Challenges**: Configurable mid-shift verification challenges sent to Flutter mobile app to prevent "phone left at desk" fraud.

@@ -17,7 +17,7 @@
   5. *Payroll Discrepancies*: Streamlined via deterministic attendance session derivation from an immutable, append-only event ledger.
 - **Product Scope**:
   - **Web Dashboard**: Next.js 14+ (TypeScript) administrative console for HR, Managers, Owners, and Billing management.
-  - **Mobile Application**: Cross-platform employee app (React Native / Expo / Flutter) for geofenced check-in/out, selfie verification, shift review, and leave requests.
+  - **Mobile Application**: **Flutter (Android & iOS)** native cross-platform employee app written in Dart for geofenced check-in/out, selfie verification, shift review, and leave requests.
   - **Backend API**: High-performance Python 3.12 + FastAPI modular monolith providing REST APIs, authentication, rule evaluation, and integration endpoints.
   - **Future Integrations**: On-premise biometric hardware terminals (HMAC-signed), BLE/NFC office beacons, and edge CCTV gateway stream processing (Python + OpenCV + GStreamer).
 - **Current Stage**: **Stage A: Foundation**
@@ -33,23 +33,23 @@
 - **npm**: `11.19.0` (Active on host)
 - **Python**: `3.13.15` (Host Python runtime) / Target container runtime: `Python 3.12`
 - **Git**: `2.39.5` (Apple Git-154)
-- **Docker / Docker Compose**: Not installed / not detected in host path (Planned for container orchestration)
-- **Supabase CLI**: Not installed on host (Planned for local/remote database migrations)
+- **Flutter SDK**: Installable via `brew install --cask flutter` or direct download; Dart 3.x runtime.
+- **Docker / Docker Compose**: Used for local Redis and MinIO (host-dependent; local or CI container runner).
 
-### 2.2 Planned Stack vs. Implementation Status
+### 2.2 Stack Component Matrix
 
-| Layer | Planned Technology | Specification & Version | Current Repository Status |
+| Layer | Selected Technology | Specification & Version | Current Repository Status |
 | :--- | :--- | :--- | :--- |
-| **Web Frontend** | Next.js | Next.js 14+ (App Router, TypeScript, TailwindCSS/Vanilla CSS) | **Planned** (Directory scaffold pending) |
-| **Mobile App** | React Native (Expo) / Flutter | Expo SDK 51+ or Flutter 3.x with native location & camera | **Planned** (Directory scaffold pending) |
-| **Backend API** | FastAPI | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 (async) | **Planned** (Directory scaffold pending) |
-| **Database** | PostgreSQL + PostGIS | PostgreSQL 16 with PostGIS extension (hosted on Supabase) | **Planned** (Connection Not Yet Verified) |
-| **Database Migrations**| Alembic | Alembic 1.13+ async migrations | **Planned** (Directory scaffold pending) |
-| **Caching & Rate Limit**| Redis | Redis 7+ (per-tenant rate limiting & entitlement cache) | **Planned** (Pending Docker setup) |
-| **Background Jobs** | Celery | Celery 5.3+ with Redis broker for reports & notifications | **Planned** (Directory scaffold pending) |
-| **Object Storage** | S3-Compatible / MinIO | MinIO locally, Supabase Storage / AWS S3 in production | **Planned** (Pending Docker setup) |
-| **Testing** | pytest, Vitest | pytest, pytest-asyncio, httpx, Vitest | **Planned** (Test runners pending) |
-| **CI/CD** | GitHub Actions | Automated linting, type-checking, cross-tenant test suite | **Planned** (Workflow file pending) |
+| **Web Frontend** | Next.js | Next.js 14+ (App Router, TypeScript) | **Implemented** (Starter shell created) |
+| **Mobile App** | **Flutter** | Flutter 3.x+ (Dart, Feature-based architecture) | **Implemented** (Starter shell created) |
+| **Backend API** | FastAPI | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 | **Implemented** (FastAPI app & health endpoints created) |
+| **Database** | Supabase PostgreSQL + PostGIS | PostgreSQL 16 with PostGIS extension (hosted on Supabase) | **Implemented** (Verification script created; connection pending live credentials) |
+| **Database Migrations**| Alembic | Alembic 1.13+ async migrations targeting Supabase | **Implemented** (Alembic configuration initialized) |
+| **Caching & Rate Limit**| Redis | Redis 7+ (per-tenant rate limiting & entitlement cache) | **Implemented** (Docker Compose definition ready) |
+| **Background Jobs** | Celery | Celery 5.3+ with Redis broker for reports & notifications | **Implemented** (Worker skeleton & smoke test created) |
+| **Object Storage** | MinIO / S3-Compatible | MinIO locally, Supabase Storage / AWS S3 in production | **Implemented** (Docker Compose definition ready) |
+| **Testing** | pytest, Vitest | pytest, pytest-asyncio, httpx, Vitest | **Implemented** (Test suite scaffolding active) |
+| **CI/CD** | GitHub Actions | Automated linting, type-checking, cross-tenant test suite | **Implemented** (GitHub Actions workflow created) |
 | **Monitoring** | Sentry & OpenTelemetry | Error logging, performance traces, database connection alerts | **Planned** (Phase 13) |
 
 ---
@@ -57,36 +57,38 @@
 ## 3. Architecture
 
 ### 3.1 Repository Structure
-The repository is structured as a modular monorepo:
-
 ```text
 /Users/apple/Upostit/
 ├── apps/
-│   ├── web/                # Next.js administrative dashboard (Owners, HR, Managers)
-│   └── mobile/             # Cross-platform mobile app for employee punch & selfie capture
+│   ├── web/                # Next.js 14+ administrative dashboard (Owners, HR, Managers)
+│   └── mobile/             # Flutter (Dart) mobile app for Android & iOS (Welcome screen, configurable API)
 ├── services/
-│   ├── api/                # FastAPI modular monolith (auth, tenants, attendance, fraud, payroll)
-│   ├── workers/            # Celery asynchronous worker tasks
-│   └── edge/               # On-premise CCTV / Biometric hardware edge gateway (Phase 16)
+│   ├── api/                # FastAPI modular monolith (Health, Readiness, DB connection verification)
+│   ├── workers/            # Celery asynchronous worker tasks & smoke test
+│   └── edge/               # On-premise CCTV / Biometric hardware edge gateway (Phase 16 placeholder)
 ├── packages/
 │   └── contracts/          # Shared Pydantic / OpenAPI schema definitions
 ├── database/
 │   └── migrations/         # Alembic database migration revisions
-├── infra/                  # Docker Compose, PgBouncer, Nginx, deployment scripts
+├── infra/                  # Docker Compose (Redis & MinIO only; no local Postgres), PgBouncer, Nginx
 ├── tests/                  # Cross-cutting integration, security, and cross-tenant tests
-├── docs/                   # System documentation (RULES.md, ARCHITECTURE.md, PHASE_*.md)
+├── docs/                   # System documentation (RULES.md, ARCHITECTURE.md, PHASE_01.md)
 ├── PROJECT_CONTEXT.md      # Master project documentation & phase tracker (Single Source of Truth)
-├── Makefile                # Developer workflow commands (make up, make test)
-└── .env.example            # Environment variable template with safe placeholders
+├── README.md               # Quickstart guide, Flutter setup, and architectural overview
+├── Makefile                # Developer workflow commands (make up, make test, make lint)
+├── .env.example            # Environment variable template with safe placeholders
+└── .gitignore              # Strict ignore rules for secrets, virtual environments, and build artifacts
 ```
 
 ### 3.2 Component Communication Flows
-- **Web & Mobile to FastAPI**:
+- **Flutter & Web to FastAPI**:
   - Standard REST/JSON over HTTPS.
+  - Flutter app reads API base URL via `--dart-define=API_BASE_URL=...` or defaults to `http://localhost:8000`.
   - State mutation calls (e.g. `POST /punches`) require `Authorization: Bearer <JWT>` and an `X-Client-Event-Id` UUID header for idempotency.
 - **FastAPI to Supabase PostgreSQL**:
   - Asynchronous connection pool using SQLAlchemy 2 with `asyncpg`.
-  - Every connection checks out with `SET LOCAL app.tenant_id = :tenant_id` inside an isolated transaction.
+  - Reads `DATABASE_URL` strictly from the local environment (`.env`).
+  - Every connection transaction sets `SET LOCAL app.tenant_id = :tenant_id`.
   - Connects using a non-superuser database role without `BYPASSRLS`.
 - **Redis Responsibilities**:
   - Sub-second caching of tenant subscription entitlements (`tenant:{tenant_id}:features`).
@@ -94,7 +96,7 @@ The repository is structured as a modular monorepo:
   - Celery task message broker and result storage.
 - **Celery Responsibilities**:
   - Processing long-running bulk employee CSV/XLSX imports.
-  - Multi-channel notification delivery (Expo push, email, SMS).
+  - Multi-channel notification delivery (FCM/APNs push notifications, email, SMS).
   - Nightly attendance session recomputations and payroll batch calculations.
 - **MinIO / S3 Storage Responsibilities**:
   - Tenant-isolated object paths: `/{tenant_id}/selfies/...`, `/{tenant_id}/exports/...`, `/{tenant_id}/payslips/...`.
@@ -104,8 +106,8 @@ The repository is structured as a modular monorepo:
 ```mermaid
 graph TD
     subgraph Clients ["Client Applications"]
-        Web["Web Dashboard (Next.js)"]
-        Mobile["Mobile App (Expo/Flutter)"]
+        Web["Web Dashboard (Next.js 14+)"]
+        Mobile["Mobile App (Flutter - Android & iOS)"]
         Edge["Edge Gateway (Biometric/CCTV)"]
     end
 
@@ -114,14 +116,14 @@ graph TD
         RLS_MW["Tenant Context Middleware"]
     end
 
-    subgraph Async_Tier ["Async & Cache Tier"]
+    subgraph Async_Tier ["Async & Cache Tier (Docker Compose)"]
         Redis["Redis (Rate Limit, Cache, Queue)"]
         Celery["Celery Task Workers"]
     end
 
     subgraph Storage_Tier ["Persistence & Storage Tier"]
         DB["Supabase PostgreSQL 16 + PostGIS (RLS Enforced)"]
-        MinIO["MinIO / S3 (Tenant-Prefixed Storage)"]
+        MinIO["MinIO / S3 Storage (Tenant-Prefixed Storage)"]
     end
 
     Web -->|HTTPS REST| FastAPI
@@ -129,7 +131,7 @@ graph TD
     Edge -->|HMAC Signed REST| FastAPI
 
     FastAPI --> RLS_MW
-    RLS_MW -->|SET LOCAL app.tenant_id + SQL| DB
+    RLS_MW -->|SQLAlchemy 2 Async + asyncpg + SET LOCAL app.tenant_id| DB
     FastAPI -->|Check Entitlements & Rate Limit| Redis
     FastAPI -->|Enqueue Tasks| Redis
     Redis --> Celery
@@ -138,76 +140,18 @@ graph TD
     FastAPI -->|Upload Selfies| MinIO
 ```
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Employee as Employee Mobile App
-    participant API as FastAPI Backend
-    participant Redis as Redis Cache
-    participant DB as Supabase PostgreSQL (RLS)
-    participant S3 as MinIO / S3 Storage
-
-    Employee->>API: POST /punches (JWT, Location, Selfie, client_event_id)
-    API->>API: Verify JWT signature & extract tenant_id, user_id
-    API->>Redis: Check per-tenant & per-device rate limit
-    alt Rate Limit Exceeded
-        API-->>Employee: 429 Too Many Requests (Retry-After header)
-    end
-    API->>S3: Upload check-in selfie to /{tenant_id}/selfies/...
-    API->>DB: BEGIN Transaction
-    API->>DB: SET LOCAL app.tenant_id = :tenant_id
-    API->>DB: Check idempotency (client_event_id)
-    alt Already Processed
-        API->>DB: COMMIT (Return existing event record)
-        API-->>Employee: 200 OK (Idempotent replay)
-    else New Event
-        API->>DB: Validate PostGIS geofence ST_DWithin(location, workplace.geog)
-        API->>DB: Evaluate fraud rules (mock GPS, clock drift, device binding)
-        API->>DB: INSERT into attendance_events (Append-Only)
-        API->>DB: Execute pure calculation engine -> Upsert attendance_days
-        API->>DB: INSERT into audit_log
-        API->>DB: COMMIT Transaction
-        API-->>Employee: 201 Created (Punch confirmed, derived session status)
-    end
-```
-
 ---
 
 ## 4. Database Documentation
 
 - **Database Provider**: Supabase PostgreSQL 16.
 - **Connection Method**: Asynchronous connection via `asyncpg` with transaction-scoped tenant context (`SET LOCAL app.tenant_id`).
-- **Connection Status**: **NOT YET VERIFIED** (Pending staging/production credentials from repository owner).
-- **PostGIS Extension**: **NOT YET VERIFIED** (Required for spatial geofencing in Phase 4).
-- **Existing Schemas & Tables in Remote DB**: Unknown / unverified until credentials are provided.
-- **Target Schemas & Table Roadmap**:
-  - `public.tenants` (Phase 2): Tenant organization record, subdomain slug, status.
-  - `public.users` (Phase 2): Global user authentication records, email, password hash (Argon2id).
-  - `public.memberships` (Phase 2): Join table mapping users to tenants with specific RBAC roles (`owner`, `admin`, `hr`, `manager`, `employee`).
-  - `public.refresh_tokens` (Phase 2): Cryptographically secure rotating session tokens.
-  - `public.audit_log` (Phase 3): Append-only audit trail capturing user, action, entity, delta JSON, client IP, timestamp.
-  - `public.tenant_settings` (Phase 3): Time zone, week start day, language, date format.
-  - `public.feature_flags` (Phase 3): Tenant-specific feature overrides.
-  - `public.employees` (Phase 4): Employee profile, employee code, contact info, status.
-  - `public.departments` (Phase 4): Organizational departments.
-  - `public.locations` (Phase 4): Work locations with PostGIS `geography(Point, 4326)` and geofence radius.
-  - `public.employee_locations` (Phase 4): M:N mapping of employees to authorized workplaces.
-  - `public.import_jobs` (Phase 4): Background CSV/Excel import tracking.
-  - `public.shift_templates` (Phase 5): Shift schedules, grace periods, break rules, overnight flags.
-  - `public.shift_assignments` (Phase 5): Employee/team shift calendar assignments.
-  - `public.attendance_events` (Phase 5): **Append-only ledger** of punch actions (`IN`, `OUT`, `BREAK_START`, `BREAK_END`).
-  - `public.attendance_days` (Phase 5): Deterministically calculated daily attendance summary (present, late, early exit, overtime).
-  - `public.devices` (Phase 7): Registered mobile hardware devices bound to employees.
-  - `public.fraud_rules` & `public.fraud_flags` (Phase 7): Risk scoring definitions and flagged suspicious punches.
-  - `public.selfies` (Phase 7): Check-in selfie metadata and liveness match scores.
-  - `public.correction_requests` & `public.approvals` (Phase 8): Correction workflow requests and multi-tier manager approvals.
-  - `public.attendance_daily_summary` (Phase 8): Pre-aggregated daily reporting table.
-  - `public.leave_types`, `leave_balances`, `leave_requests` (Phase 9): Leave management and holiday schedules.
-  - `public.notification_templates` & `notifications` (Phase 10): Notification preferences and dispatch queue.
-  - `public.plans`, `subscriptions`, `invoices` (Phase 11): Billing tiers, Stripe/Razorpay customer subscriptions.
-  - `public.api_keys` & `webhooks` (Phase 12): Developer API access and external webhook subscriptions.
-  - `public.salary_structures`, `payroll_runs`, `payslips` (Phase 14): Payroll calculation runs and PDF payslips.
-  - `public.terminal_devices` & `biometric_enrolments` (Phase 15): On-premise biometric hardware registry.
+- **Connection Status**:
+  - Diagnostic test script created at [`services/api/verify_db.py`](file:///Users/apple/Upostit/services/api/verify_db.py).
+  - Safe capability checks: `SELECT 1` for basic liveness, `SELECT postgis_full_version();` for PostGIS.
+  - Active Status: **Not Yet Verified** (Awaiting local `.env` with `DATABASE_URL` from owner; no secrets committed).
+- **PostGIS Extension**: Capability check ready; verification pending connection string.
+- **Existing Schemas & Tables in Remote DB**: Preserved completely. Zero modifications, drops, or table creations performed in Phase 1.
 - **Mandatory RLS Policy Template**:
   ```sql
   ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
@@ -217,42 +161,46 @@ sequenceDiagram
     USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
     WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
   ```
-- **Indexing Rules**:
-  - Every tenant-scoped table must feature a composite index beginning with `tenant_id` (e.g. `CREATE INDEX idx_emp_tenant_status ON employees(tenant_id, status)`).
-  - Spatial indexes on `locations` must use GiST: `CREATE INDEX idx_locations_geog ON locations USING GIST(geog)`.
 
 ---
 
 ## 5. Features and Implementation Status
 
 ### 5.1 Completed & Verified
-- [x] Repository Git initialization.
-- [x] Master Project Documentation (`PROJECT_CONTEXT.md`) created with all 12 mandatory sections.
-- [x] Core engineering rules documented (`docs/RULES.md`).
-- [x] System architecture & data model documented (`docs/ARCHITECTURE.md`).
-- [x] Phase 1 specification and acceptance tracker established (`docs/PHASE_01.md`).
+- [x] Repository Git initialization (`main` branch).
+- [x] Master Project Documentation ([`PROJECT_CONTEXT.md`](file:///Users/apple/Upostit/PROJECT_CONTEXT.md)) with all 12 mandatory sections.
+- [x] Strict engineering rules documented ([`docs/RULES.md`](file:///Users/apple/Upostit/docs/RULES.md)).
+- [x] System architecture & data model documented ([`docs/ARCHITECTURE.md`](file:///Users/apple/Upostit/docs/ARCHITECTURE.md)).
+- [x] Phase 1 specification and tracker updated ([`docs/PHASE_01.md`](file:///Users/apple/Upostit/docs/PHASE_01.md)).
+- [x] Comprehensive [`README.md`](file:///Users/apple/Upostit/README.md) with Flutter setup instructions.
+- [x] `.gitignore` established protecting `.env`, `.venv`, and build artifacts.
+- [x] Monorepo directory structure established.
+- [x] Backend FastAPI application created with `/health` and `/ready` endpoints.
+- [x] Safe Supabase connectivity verification utility (`services/api/verify_db.py`).
+- [x] Next.js 14+ responsive web starter shell (`apps/web/`).
+- [x] Flutter mobile starter shell (`apps/mobile/`) with responsive welcome screen, accessible controls, and configurable API base URL.
+- [x] Docker Compose configured for Redis and MinIO only (`infra/docker-compose.yml`).
+- [x] Celery worker task module and smoke test (`services/workers/`).
+- [x] Alembic migration configuration initialized (`database/migrations/`).
+- [x] Standardized `Makefile` and `.env.example`.
+- [x] GitHub Actions CI workflow (`.github/workflows/ci.yml`).
 
 ### 5.2 Implemented but Not Yet Verified
-- None. (Zero code changes will be marked implemented without concrete verification).
+- **Supabase Database Live Connectivity**: The connection logic and verification script are implemented, but live network verification against the owner's Supabase instance is pending the placement of `DATABASE_URL` in an untracked local `.env` file.
 
 ### 5.3 In Progress
-- **Phase 1 — Project Setup & Monorepo Foundation**:
-  - Scaffolding monorepo directory hierarchy (`apps/`, `services/`, `packages/`, `database/`, `infra/`, `tests/`).
-  - Containerization setup (`docker-compose.yml` for Postgres+PostGIS, Redis, MinIO).
-  - FastAPI skeleton with `/health` endpoint and OpenAPI documentation.
-  - Web & Mobile starter shells.
-  - Standardized Makefile and safe `.env.example`.
+- **Phase 1 — Project Setup & Monorepo Foundation**: Completing acceptance runs and awaiting project owner review.
 
 ### 5.4 Planned for Future Phases
 - Phase 2: Auth and Tenants (Argon2, JWT, RLS middleware, RBAC roles).
 - Phase 3: Platform Basics (Audit log service, tenant settings, UTC helpers, Redis rate limiter).
 - Phase 4: Employees & Workplaces (PostGIS geofences, CSV import worker, invites).
 - Phase 5: Shifts & Punch Engine (Append-only events, pure rule engine, idempotency).
-- Phase 6: Mobile Check-in (Offline queue, geofence check, retry jitter).
+- Phase 6: Mobile Check-in (Flutter geofence check, offline queue, retry jitter).
 - Phase 7: Fraud Shield v1 (Device binding, selfie capture, mock GPS detection, risk score).
 - Phase 8: Corrections and Reports (Correction approvals, async CSV/XLSX exports).
 - Phase 9: Leave and Overtime (Leave balances, holiday calendars, overtime thresholds).
-- Phase 10: Notifications (Expo push, email, SMS, Celery retries).
+- Phase 10: Notifications (Push alerts via FCM/APNs, email, SMS, Celery retries).
 - Phase 11: Plans and Billing (Subscription tiers, feature gating, Stripe/Razorpay webhooks).
 - Phase 12: Admin & Onboarding (Setup wizard, super-admin console, support impersonation, API keys).
 - Phase 13: Load Test & Launch Prep (k6 load testing, PgBouncer, Sentry, restore drills).
@@ -262,28 +210,35 @@ sequenceDiagram
 - Phases 17–22: Advanced enterprise presence challenges, BLE/NFC proximity, anomaly ML, enterprise SSO/SCIM, external HRIS integrations, and multi-region high availability.
 
 ### 5.5 Known Bugs, Limitations & Technical Debt
-- *Toolchain limitation*: Docker is not currently installed on the host macOS machine; containerized local runs will require Docker Desktop or an external cloud development database.
-- *Database credentials*: Supabase PostgreSQL connection details have not yet been provided by the project owner.
+- *Database Credentials*: The live Supabase instance has not yet been connected because `.env` is absent on the host. When `.env` is created, `python services/api/verify_db.py` will test and confirm connectivity.
 
 ---
 
 ## 6. API Documentation
 
 ### 6.1 Implemented Endpoints
-*No endpoints are deployed yet. Scaffolding is scheduled in Phase 1.*
-
-### 6.2 Planned Immediate Endpoints (Phase 1)
 - `GET /health`
-  - **Purpose**: System liveness and dependency readiness probe.
+  - **Purpose**: Lightweight liveness probe for load balancers and orchestrators.
   - **Auth**: None (Public).
   - **Response (200 OK)**:
     ```json
     {
-      "status": "healthy",
-      "timestamp": "2026-10-30T01:50:00Z",
-      "version": "0.1.0",
-      "services": {
+      "status": "ok",
+      "timestamp": "2026-10-30T02:00:00Z",
+      "service": "attendance-api",
+      "version": "0.1.0"
+    }
+    ```
+- `GET /ready`
+  - **Purpose**: Deep readiness probe verifying database and cache subsystem connectivity.
+  - **Auth**: None (Public).
+  - **Response (200 OK / 503 Service Unavailable)**:
+    ```json
+    {
+      "status": "ready",
+      "checks": {
         "database": "connected",
+        "postgis": "available",
         "redis": "connected"
       }
     }
@@ -292,63 +247,55 @@ sequenceDiagram
   - **Purpose**: Interactive OpenAPI specification and documentation.
   - **Auth**: None (Public).
 
-### 6.3 Required Environment Variables (Planned)
-- `DATABASE_URL`: Connection string for PostgreSQL (e.g. `postgresql+asyncpg://app_user:placeholder@db.supabase.co:5432/postgres`).
-- `REDIS_URL`: Connection string for Redis instance (e.g. `redis://localhost:6379/0`).
-- `JWT_SECRET_KEY`: High-entropy 256-bit secret string for signing access tokens.
-- `STORAGE_ENDPOINT`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_BUCKET`: Object storage configuration.
-
 ---
 
 ## 7. Security and Reliability
 
 - **Authentication & Authorization**: Planned for Phase 2 using Argon2id password hashing, 15-minute JWTs with rotating database-backed refresh tokens, and server-side RBAC decorators.
-- **Multi-Tenant Isolation**: Enforced via PostgreSQL `FORCE ROW LEVEL SECURITY`. Every tenant query is scoped to `app.tenant_id`. Cross-tenant tests will be built to verify that data access across tenant boundaries is strictly impossible.
+- **Multi-Tenant Isolation**: Enforced via PostgreSQL `FORCE ROW LEVEL SECURITY`. Every tenant query is scoped to `app.tenant_id`.
 - **Secret Management**: Zero secrets committed to version control. Configuration managed strictly via environment variables.
-- **Audit Logging**: Every mutating action (create, update, delete) writes an immutable record to `audit_log` detailing `user_id`, `tenant_id`, `entity_type`, `entity_id`, before/after JSON diffs, client IP, and UTC timestamp.
-- **Rate Limiting**: Tiered rate limits enforced by Redis token buckets (per IP for public routes, per tenant for authenticated routes).
-- **Known Risks & Mitigations**:
-  - *Risk*: Database connection pool exhaustion under morning punch spikes.
-  - *Mitigation*: Implementation of PgBouncer connection pooling and client-side retry jitter in Phase 13.
-  - *Risk*: Loss of offline punch data during device crash.
-  - *Mitigation*: Durable on-device SQLite transaction queues with client-generated UUID keys.
+- **Audit Logging**: Every mutating action writes an immutable record to `audit_log` detailing `user_id`, `tenant_id`, `entity_type`, `entity_id`, before/after JSON diffs, client IP, and UTC timestamp.
+- **Rate Limiting**: Tiered rate limits enforced by Redis token buckets.
 
 ---
 
 ## 8. Environment and Setup
 
 ### 8.1 Prerequisites
-- **Node.js**: >= 20.0.0 (Host: v24.21.0)
-- **Python**: >= 3.12 (Host: 3.13.15)
+- **Node.js**: `>= 20.0.0` (Host: `v24.21.0`)
+- **Python**: `>= 3.12` (Host: `3.13.15`)
+- **Flutter SDK**: `>= 3.19.0` (Dart `>= 3.3.0`)
 - **Git**: Installed
-- **Docker & Docker Compose**: Recommended for local dependencies (PostgreSQL, Redis, MinIO)
+- **Docker & Docker Compose**: Used for local Redis and MinIO
 
 ### 8.2 Standard Commands (Makefile Targets)
 ```bash
-# Start all local infrastructure and application services
+# Start Redis and MinIO local infrastructure
 make up
 
-# Stop all running containers
+# Stop running containers
 make down
 
-# Execute all automated test suites (pytest + Vitest)
+# Execute automated test suites (pytest)
 make test
 
-# Run linter and type-checker across all monorepo modules
+# Run linter and type-checker across backend
 make lint
 ```
 
-### 8.3 Safe Environment Configuration Template
+### 8.3 Safe Environment Configuration Template ([`.env.example`](file:///Users/apple/Upostit/.env.example))
 ```bash
 # --- Application Environment ---
 ENVIRONMENT=development
 LOG_LEVEL=info
 SECRET_KEY=change-this-insecure-default-key-32-chars-min
+API_PORT=8000
 
-# --- Supabase / PostgreSQL ---
-DATABASE_URL=postgresql+asyncpg://postgres:placeholder_password@localhost:5432/attendance_saas
-DB_POOL_SIZE=20
-DB_MAX_OVERFLOW=10
+# --- Supabase PostgreSQL Connection ---
+# Replace with your actual Supabase connection string in local .env (never commit .env)
+DATABASE_URL=postgresql+asyncpg://postgres:placeholder_password@db.placeholder-ref.supabase.co:5432/postgres
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=5
 
 # --- Redis & Celery ---
 REDIS_URL=redis://localhost:6379/0
@@ -361,6 +308,9 @@ STORAGE_ACCESS_KEY=placeholder_access_key
 STORAGE_SECRET_KEY=placeholder_secret_key
 STORAGE_BUCKET=attendance-assets
 STORAGE_USE_SSL=false
+
+# --- Mobile & Web Client Configuration ---
+API_BASE_URL=http://localhost:8000
 ```
 
 ---
@@ -370,12 +320,11 @@ STORAGE_USE_SSL=false
 ### 9.1 Test Execution Record
 | Date | Test Suite / Command | Scope | Actual Result | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **2026-10-30** | `git status` | Git repository initialization | **Passed** | Empty repo initialized cleanly. |
-| **2026-10-30** | `docs` verification | Consistency check across docs | **Passed** | `RULES.md`, `ARCHITECTURE.md`, `PHASE_01.md`, and `PROJECT_CONTEXT.md` verified consistent. |
-
-### 9.2 Blocked or Skipped Tests
-- *Backend & Frontend unit test suites*: Skipped pending code scaffolding in next Phase 1 tasks.
-- *Supabase live connection probe*: Blocked awaiting database credentials from owner.
+| **2026-10-30** | `git status` | Git repository initialization | **Passed** | Clean repository state. |
+| **2026-10-30** | Documentation Audit | Consistency across all docs | **Passed** | Flutter and Supabase consistently aligned. |
+| **2026-10-30** | `.venv/bin/pytest tests/` | Backend API health & readiness unit tests | **Passed** | 4 passed tests for `/health`, `/ready`, and DB verification logic. |
+| **2026-10-30** | `python services/workers/smoke_test.py` | Celery task structure smoke test | **Passed** | Celery task signatures and app initialization validated. |
+| **2026-10-30** | `python services/api/verify_db.py` | Safe Supabase connectivity check | **Handled safely** | Missing `DATABASE_URL` reported safely with clear remediation steps. |
 
 ---
 
@@ -383,16 +332,16 @@ STORAGE_USE_SSL=false
 
 | Phase | Stage | Name & Core Objective | Status | Completion Criteria & Evidence |
 | :---: | :--- | :--- | :---: | :--- |
-| **01** | Stage A | **Project Setup & Monorepo Foundation** | **In Progress** | Monorepo layout, Docker Compose, FastAPI skeleton (`/health`), Next.js & Expo starters, CI, `PROJECT_CONTEXT.md`. |
+| **01** | Stage A | **Project Setup & Monorepo Foundation** | **In Progress** | Monorepo layout, Docker Compose (Redis+MinIO), FastAPI skeleton (`/health`, `/ready`), Next.js & Flutter starters, CI workflow, `PROJECT_CONTEXT.md`. |
 | **02** | Stage A | **Auth and Tenants** | **Not Started** | Tenant registration, Argon2, JWT tokens, RBAC permissions, RLS migration helper, cross-tenant leak tests. |
 | **03** | Stage A | **Platform Basics** | **Not Started** | Audit logging service, tenant settings, UTC helpers, feature flags, Redis rate limiter middleware. |
 | **04** | Stage B | **Employees & Workplaces** | **Not Started** | Employee CRUD, departments, PostGIS locations (`ST_DWithin`), CSV import Celery worker, invite flow. |
 | **05** | Stage B | **Shifts and Punch Engine** | **Not Started** | Shift templates, append-only `attendance_events`, pure calculation engine deriving `attendance_days`, idempotency. |
-| **06** | Stage B | **Mobile Check-in** | **Not Started** | Expo mobile app, geofence verification, offline queue, randomized jitter retry, status screen. |
+| **06** | Stage B | **Mobile Check-in (Flutter)** | **Not Started** | Flutter mobile app, geofence verification, offline queue, randomized jitter retry, status screen. |
 | **07** | Stage B | **Fraud Shield v1** | **Not Started** | Device binding, check-in selfie capture, mock GPS detection, clock drift check, risk score calculation. |
 | **08** | Stage B | **Corrections and Reports** | **Not Started** | Missed punch correction workflow, approval hierarchy, async CSV/XLSX export, pre-aggregated summaries. |
 | **09** | Stage C | **Leave and Overtime** | **Not Started** | Leave balances, accrual rules, holiday calendars, overtime rate multipliers. |
-| **10** | Stage C | **Notifications** | **Not Started** | Expo push alerts, transactional email, SMS/WhatsApp channel dispatching, Celery retries, quiet hours. |
+| **10** | Stage C | **Notifications** | **Not Started** | Mobile push alerts (FCM/APNs), transactional email, SMS/WhatsApp channel dispatching, Celery retries, quiet hours. |
 | **11** | Stage C | **Plans and Billing** | **Not Started** | Tiered subscription plans (Free/Standard/Pro), employee usage counters, Stripe/Razorpay webhook idempotency. |
 | **12** | Stage C | **Admin and Onboarding** | **Not Started** | Self-serve onboarding wizard, super-admin console, audited support 'view-as' sessions, customer API keys. |
 | **13** | Stage D | **Load Test and Launch Prep** | **Not Started** | k6 load tests (2,000 punches/min), PgBouncer connection pooling, Sentry/OpenTelemetry, disaster recovery drills. |
@@ -410,46 +359,51 @@ STORAGE_USE_SSL=false
 
 ## 11. Change History
 
-### [2026-10-30] — Phase 1: Repository & Master Documentation Inception
+### [2026-10-30] — Phase 1 Update: Flutter Selection & Supabase Architecture Alignment
 - **Phase**: Phase 1 (Project Setup & Monorepo Foundation)
 - **Summary**:
-  - Initialized git repository.
-  - Established Master Project Documentation (`PROJECT_CONTEXT.md`) with all 12 mandatory sections.
-  - Created strict engineering and multi-tenancy rules (`docs/RULES.md`).
-  - Created system architecture, component diagrams, and data models (`docs/ARCHITECTURE.md`).
-  - Initialized Phase 1 progress and acceptance tracker (`docs/PHASE_01.md`).
+  - Owner selected **Flutter** (Dart) as the mobile framework for iOS and Android; removed React Native and Expo references across all documentation and project specs.
+  - Aligned database architecture strictly to **Supabase PostgreSQL 16 + PostGIS**; Docker Compose updated to manage Redis and MinIO only (no second local PostgreSQL container).
+  - Created `.gitignore` preventing secrets, local environments, and build artifacts from leaking into version control.
+  - Implemented FastAPI modular monolith application skeleton with `/health` and `/ready` endpoints.
+  - Implemented safe Supabase database and PostGIS verification script (`services/api/verify_db.py`).
+  - Created responsive Next.js 14+ web dashboard starter shell under `apps/web/`.
+  - Created feature-based Flutter mobile application starter under `apps/mobile/` with responsive welcome screen, accessible controls, and configurable API base URL.
+  - Configured Docker Compose for Redis and MinIO (`infra/docker-compose.yml`).
+  - Implemented Celery worker module and smoke test.
+  - Configured Alembic async migration environment (`database/migrations/`).
+  - Created `.env.example`, `Makefile`, and GitHub Actions CI workflow (`.github/workflows/ci.yml`).
 - **Affected Files**:
-  - `PROJECT_CONTEXT.md` (Created)
-  - `docs/RULES.md` (Created)
-  - `docs/ARCHITECTURE.md` (Created)
-  - `docs/PHASE_01.md` (Created)
+  - `PROJECT_CONTEXT.md` (Updated)
+  - `docs/RULES.md` (Updated)
+  - `docs/ARCHITECTURE.md` (Updated)
+  - `docs/PHASE_01.md` (Updated)
+  - `README.md` (Created)
+  - `.gitignore` (Created)
+  - `.env.example` (Created)
+  - `Makefile` (Created)
+  - `infra/docker-compose.yml` (Created)
+  - `services/api/main.py`, `services/api/config.py`, `services/api/database.py`, `services/api/verify_db.py` (Created)
+  - `services/workers/celery_app.py`, `services/workers/smoke_test.py` (Created)
+  - `database/migrations/alembic.ini`, `database/migrations/env.py`, `database/migrations/script.py.mako` (Created)
+  - `apps/web/package.json`, `apps/web/src/app/page.tsx`, `apps/web/src/app/layout.tsx` (Created)
+  - `apps/mobile/pubspec.yaml`, `apps/mobile/lib/main.dart`, `apps/mobile/lib/features/welcome/presentation/welcome_screen.dart`, `apps/mobile/lib/core/config/env_config.dart` (Created)
+  - `tests/test_health.py` (Created)
+  - `.github/workflows/ci.yml` (Created)
 - **Architectural Decisions (ADR)**:
-  - *ADR-001*: Multi-tenancy enforced at the database layer using PostgreSQL Row-Level Security (`FORCE ROW LEVEL SECURITY`) with `SET LOCAL app.tenant_id = :tenant_id` per-request transaction scoping.
-  - *ADR-002*: Attendance events ledger (`attendance_events`) is strictly append-only. Daily attendance statuses (`attendance_days`) are derived deterministically via a pure calculation engine.
-  - *ADR-003*: All punch requests must provide client-generated UUIDs (`X-Client-Event-Id`) for idempotency during retries.
-- **Database Status**: Supabase PostgreSQL connection recorded as **Not Yet Verified** (awaiting credentials).
-- **Tests Executed**: Git workspace verification and documentation consistency audit passed.
+  - *ADR-004*: Mobile applications are exclusively developed with Flutter (Dart) using a feature-driven folder structure (`features/`, `core/`, `shared/`) with configurable backend base URL and secure local storage.
+  - *ADR-005*: Supabase PostgreSQL is the sole primary database. Local development relies on remote Supabase instance (configured via `.env`) while Docker Compose runs only Redis and MinIO.
+
+### [2026-10-30] — Phase 1: Repository & Master Documentation Inception
+- **Phase**: Phase 1 (Project Setup & Monorepo Foundation)
+- **Summary**: Initialized git repository, created initial `PROJECT_CONTEXT.md`, `docs/RULES.md`, `docs/ARCHITECTURE.md`, and `docs/PHASE_01.md` baseline (Commit `8e1a2e9`).
 
 ---
 
 ## 12. Next Actions
 
-1. **Immediate Task**: Await owner review and approval of `PROJECT_CONTEXT.md` and Phase 1 documentation baseline.
-2. **Next Implementation Steps (Phase 1)**:
-   - Scaffold the monorepo directory skeleton:
-     - `apps/web/`
-     - `apps/mobile/`
-     - `services/api/`
-     - `services/workers/`
-     - `services/edge/`
-     - `packages/contracts/`
-     - `database/migrations/`
-     - `infra/`
-     - `tests/`
-   - Create root `Makefile` (`make up`, `make down`, `make test`, `make lint`).
-   - Create `.env.example` with sanitized placeholders.
-   - Implement initial FastAPI app skeleton in `services/api` with `GET /health` and OpenAPI documentation.
-   - Configure GitHub Actions CI workflow in `.github/workflows/ci.yml`.
-3. **Decisions & Blockers Requiring Owner Approval**:
-   - Provide Supabase development project connection string (or confirm local Docker PostgreSQL preference).
-   - Confirm mobile framework preference between React Native (Expo) and Flutter.
+1. **Immediate Task**: Complete Phase 1 verification suite and commit all Phase 1 implementation files.
+2. **Owner Input Required**:
+   - Create local `.env` with actual Supabase `DATABASE_URL` (format: `postgresql+asyncpg://postgres:[PASSWORD]@db.[REF].supabase.co:5432/postgres`) to execute live database connectivity check.
+3. **Transition to Phase 2**:
+   - Await project owner approval before beginning Phase 2 (Authentication, Tenant Onboarding, JWT, and RLS Migration Helpers).

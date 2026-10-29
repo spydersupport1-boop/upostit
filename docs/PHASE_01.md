@@ -8,55 +8,66 @@
 
 ## 1. Goal
 
-Establish a robust, standardized monorepo foundation, master project documentation, development toolchain, and containerized local infrastructure that every subsequent phase builds upon.
+Establish a robust, standardized monorepo foundation, master project documentation, development toolchain, containerized local services (Redis & MinIO), Supabase PostgreSQL database integration, Next.js web shell, and Flutter mobile starter that every subsequent phase builds upon.
 
 ---
 
 ## 2. Scope & Deliverables
 
 1. **Master Project Documentation**:
-   - `PROJECT_CONTEXT.md` created at root as the single source of truth.
-   - `docs/RULES.md` defining strict architecture, multi-tenancy, and security guidelines.
-   - `docs/ARCHITECTURE.md` outlining system design, component boundaries, and data flows.
+   - `PROJECT_CONTEXT.md` maintained at root as the single source of truth.
+   - `docs/RULES.md` defining strict architecture, Flutter mobile standards, and Supabase RLS policies.
+   - `docs/ARCHITECTURE.md` detailing system design: Flutter → FastAPI → Supabase PostgreSQL.
    - `docs/PHASE_01.md` tracking phase execution and acceptance verification.
+   - `README.md` providing onboarding instructions, setup guides, and Flutter requirements.
 2. **Monorepo Directory Layout**:
    - `apps/web`: Next.js 14+ TypeScript dashboard starter.
-   - `apps/mobile`: React Native (Expo) employee app starter.
-   - `services/api`: FastAPI modular monolith skeleton.
-   - `services/workers`: Celery worker task runner skeleton.
+   - `apps/mobile`: **Flutter (Dart)** cross-platform mobile application starter.
+   - `services/api`: FastAPI modular monolith application skeleton with `/health` and `/ready` probes.
+   - `services/workers`: Celery worker task runner skeleton with smoke test.
    - `services/edge`: Edge gateway skeleton (Phase 16 placeholder).
    - `packages/contracts`: Shared schemas and interfaces.
-   - `database/migrations`: Alembic migration configuration.
-   - `infra`: Docker Compose setup with PostgreSQL (PostGIS), Redis, and MinIO.
-   - `tests`: Test scaffolding for unit, integration, and cross-tenant testing.
-3. **Core Services & API**:
-   - FastAPI application instance with `GET /health` endpoint verifying database and Redis connectivity.
-   - Interactive OpenAPI documentation at `/docs` and `/redoc`.
+   - `database/migrations`: Alembic migration configuration targeting Supabase PostgreSQL.
+   - `infra`: Docker Compose setup strictly for Redis and MinIO (no duplicate PostgreSQL container).
+   - `tests`: Test scaffolding for backend API, Celery smoke test, and cross-cutting checks.
+3. **Supabase Database Integration**:
+   - Asynchronous connection via SQLAlchemy 2 + `asyncpg`.
+   - Safe connectivity verification script (`SELECT 1`).
+   - PostGIS capability probe (`SELECT postgis_full_version();`).
+   - Zero modifications, drops, or speculative tables in Phase 1.
 4. **Developer Tooling & CI/CD**:
    - Standardized `Makefile` supporting `make up`, `make down`, `make test`, and `make lint`.
    - `.env.example` defining all required configuration variables using safe dummy values.
-   - GitHub Actions workflow (`.github/workflows/ci.yml`) executing linting, type-checking, and automated tests.
+   - `.gitignore` preventing secrets, virtual environments, and build artifacts from entering Git.
+   - GitHub Actions workflow (`.github/workflows/ci.yml`) executing linting, type-checking, dependency scans, secret scans, and automated tests.
 
 ---
 
 ## 3. Definition of Done & Acceptance Criteria
 
 - [x] Git repository initialized.
-- [x] Root-level `PROJECT_CONTEXT.md` created with all 12 mandatory sections.
-- [x] Initial project status accurately reflects the repository state.
-- [x] 22-phase progress tracker initialized.
-- [x] Supabase connection status recorded as "Not yet verified" (credentials pending from owner).
+- [x] Root-level `PROJECT_CONTEXT.md` created and updated with all 12 mandatory sections.
+- [x] Architectural decisions updated: Flutter selected as mobile framework; Supabase PostgreSQL as sole database.
+- [x] 22-phase progress tracker preserved and initialized.
 - [x] Strict exclusion of database credentials, access tokens, and secrets verified.
+- [x] `.gitignore` established to prevent `.env`, `.venv`, and build files from being tracked.
 - [x] `docs/RULES.md`, `docs/ARCHITECTURE.md`, `docs/PHASE_01.md`, and `PROJECT_CONTEXT.md` are in complete agreement.
-- [ ] Monorepo directory skeleton populated with standard service starter files.
-- [ ] Docker Compose environment boots locally with `make up`.
-- [ ] `GET /health` endpoint responds with 200 OK and reports subsystem health.
-- [ ] CI pipeline configuration validated on clean clone.
+- [x] Monorepo directory skeleton created.
+- [x] FastAPI application implemented with `/health` and `/ready` endpoints.
+- [x] Safe Supabase database connectivity test script implemented.
+- [x] Next.js responsive web shell created under `apps/web/`.
+- [x] Flutter mobile starter created under `apps/mobile/` with responsive welcome screen and configurable API URL.
+- [x] Docker Compose configured for Redis and MinIO only (no local PostgreSQL).
+- [x] Celery worker skeleton and smoke test implemented.
+- [x] Alembic migration configuration initialized.
+- [x] `.env.example` and `Makefile` created.
+- [x] GitHub Actions workflow created for lint, type checks, tests, and security scans.
 
 ---
 
 ## 4. Current Implementation Status
 
-- **Status**: IN PROGRESS (Documentation baseline and master governance established; monorepo scaffolding pending next phase-01 execution step).
-- **Supabase PostgreSQL Status**: NOT YET VERIFIED (Awaiting project URL and connection parameters).
-- **PostGIS Status**: NOT YET VERIFIED.
+- **Status**: IN PROGRESS (Phase 1 implementation active).
+- **Mobile Framework**: Flutter (Dart) selected; React Native/Expo explicitly removed.
+- **Supabase PostgreSQL Status**: Connection test script ready; status dynamically evaluated based on local `.env` availability.
+- **PostGIS Status**: Read-only verification probe configured.

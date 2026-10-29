@@ -9,32 +9,38 @@ This document defines the strict engineering, architectural, multi-tenancy, and 
 | Layer | Technology | Purpose & Architectural Notes |
 | :--- | :--- | :--- |
 | **Web Dashboard** | Next.js 14+ (App Router) + TypeScript | Admin, HR, Manager, and Billing portals. |
-| **Mobile App** | React Native (Expo) / Flutter | Employee check-in, GPS geofencing, selfie liveness, offline queue. |
-| **Backend API** | Python 3.12 + FastAPI | Modular monolith with Pydantic v2, SQLAlchemy 2 (async), and Alembic. |
-| **Database** | PostgreSQL 16 + PostGIS (via Supabase) | Primary source of truth, Row-Level Security (RLS), spatial calculations. |
+| **Mobile App** | **Flutter (Android & iOS) + Dart** | Employee check-in, GPS geofencing, selfie liveness, offline queue. Maintainable feature-based architecture. |
+| **Backend API** | Python 3.12 + FastAPI | Modular monolith with Pydantic v2, SQLAlchemy 2 (async with asyncpg), and Alembic. |
+| **Database** | PostgreSQL 16 + PostGIS (via Supabase) | Primary source of truth, Row-Level Security (RLS), spatial calculations. Single database instance; no second local PostgreSQL container. |
 | **Cache & Queues** | Redis 7+ & Celery | Per-tenant rate limiting, short-lived entitlement caches, async worker tasks. |
 | **File Storage** | S3-Compatible / MinIO / Supabase Storage | Check-in selfies, exported reports, payslips; path prefixed with `tenant_id`. |
-| **Delivery & CI/CD**| Docker Compose, GitHub Actions | Automated linting, type-checking, pytest, and Vitest runs. |
-| **Monitoring** | Sentry + OpenTelemetry | Distributed tracing, error tracking, and performance monitoring. |
+| **Delivery & CI/CD**| Docker Compose (Redis + MinIO), GitHub Actions | Automated linting, type-checking, pytest, and Vitest runs. |
+| **Monitoring** | Sentry + OpenTelemetry | Distributed tracing, error tracking, and performance monitoring (Phase 13). |
 
 ---
 
 ## 2. Core Architecture Rules
 
 1. **Modular Monolith**: One unified FastAPI application structured into domain modules (`auth`, `tenants`, `employees`, `attendance`, `fraud`, `leave`, `billing`, `payroll`). No premature microservices.
-2. **Edge Gateway Isolation**: The edge gateway (`services/edge`, Phase 16) is the only separate standalone service, interfacing on-premise CCTV cameras and biometric terminals.
-3. **UTC Everywhere**: All timestamps are stored strictly in UTC (`TIMESTAMPTZ`). Conversion to the tenant's local time zone occurs solely at the presentation and shift-rule evaluation layers.
-4. **Append-Only Attendance Events**: `attendance_events` is an immutable, append-only ledger (`IN`, `OUT`, `BREAK_START`, `BREAK_END`). Attendance corrections never mutate or delete historical event rows; they append compensating events.
-5. **Server Time Authority**: The authoritative punch timestamp is determined by the server upon receipt. The client device timestamp is stored purely for drift and fraud analysis.
-6. **Client-Generated Idempotency Keys**: Every punch payload must include a client-generated UUID (`client_event_id`). Repeated transmissions with identical keys return identical results without duplicating events.
-7. **Cache is Never the Source of Truth**: Redis is strictly a performance acceleration and rate-limiting tier. All persistent state resides in PostgreSQL.
-8. **Cursor Pagination Mandatory**: Every list endpoint must implement cursor-based pagination. Unbounded queries (`SELECT *` without limits) are strictly forbidden.
+2. **Mobile Architecture (Flutter)**:
+   - Built with Flutter for Android and iOS using Dart.
+   - Clean, feature-based project structure under `apps/mobile/` (`features/`, `core/`, `shared/`).
+   - Environment-based API configuration pointing to FastAPI base URL.
+   - Offline queue using local encrypted storage (e.g. Hive/sqflite/flutter_secure_storage) with idempotency keys.
+   - No React Native, Expo, or WebView.
+3. **Edge Gateway Isolation**: The edge gateway (`services/edge`, Phase 16) is the only separate standalone service, interfacing on-premise CCTV cameras and biometric terminals.
+4. **UTC Everywhere**: All timestamps are stored strictly in UTC (`TIMESTAMPTZ`). Conversion to the tenant's local time zone occurs solely at the presentation and shift-rule evaluation layers.
+5. **Append-Only Attendance Events**: `attendance_events` is an immutable, append-only ledger (`IN`, `OUT`, `BREAK_START`, `BREAK_END`). Attendance corrections never mutate or delete historical event rows; they append compensating events.
+6. **Server Time Authority**: The authoritative punch timestamp is determined by the server upon receipt. The client device timestamp is stored purely for drift and fraud analysis.
+7. **Client-Generated Idempotency Keys**: Every punch payload must include a client-generated UUID (`client_event_id`). Repeated transmissions with identical keys return identical results without duplicating events.
+8. **Cache is Never the Source of Truth**: Redis is strictly a performance acceleration and rate-limiting tier. All persistent state resides in Supabase PostgreSQL.
+9. **Cursor Pagination Mandatory**: Every list endpoint must implement cursor-based pagination. Unbounded queries (`SELECT *` without limits) are strictly forbidden.
 
 ---
 
 ## 3. Multi-Tenancy & Data Isolation Rules
 
-1. **Shared Database Architecture**: Multi-tenancy is enforced within a single shared PostgreSQL database. Every tenant-scoped table must include `tenant_id UUID NOT NULL`.
+1. **Shared Database Architecture**: Multi-tenancy is enforced within a single shared Supabase PostgreSQL database. Every tenant-scoped table must include `tenant_id UUID NOT NULL`.
 2. **Token-Derived Tenant Identity**: The active `tenant_id` must be extracted exclusively from the cryptographically verified JWT access token. It must never be accepted from request parameters, path variables, or body payloads.
 3. **Non-Superuser Application Role**: The API database user operates under a dedicated non-superuser role without `BYPASSRLS` privileges.
 4. **Per-Request Transaction Context**: Every database transaction executes `SET LOCAL app.tenant_id = :tenant_id` before running queries, ensuring safe connection pooling across requests.
