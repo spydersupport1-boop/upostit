@@ -83,6 +83,7 @@ async def readiness_check() -> JSONResponse:
     # 2. Check Redis (graceful probe)
     try:
         import redis.asyncio as aioredis
+
         r = aioredis.from_url(settings.REDIS_URL, socket_timeout=2)
         await r.ping()
         await r.aclose()

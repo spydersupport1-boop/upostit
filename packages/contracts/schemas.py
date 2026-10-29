@@ -10,6 +10,7 @@ T = TypeVar("T")
 
 class APIResponse(BaseModel, Generic[T]):
     """Standardized API envelope for consistent responses."""
+
     model_config = ConfigDict(from_attributes=True)
 
     success: bool = True
@@ -21,6 +22,7 @@ class APIResponse(BaseModel, Generic[T]):
 
 class HealthResponse(BaseModel):
     """Schema for health probe response."""
+
     status: str
     timestamp: datetime
     service: str

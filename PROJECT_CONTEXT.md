@@ -147,10 +147,11 @@ graph TD
 - **Database Provider**: Supabase PostgreSQL 16.
 - **Connection Method**: Asynchronous connection via `asyncpg` with transaction-scoped tenant context (`SET LOCAL app.tenant_id`).
 - **Connection Status**:
-  - Diagnostic test script created at [`services/api/verify_db.py`](file:///Users/apple/Upostit/services/api/verify_db.py).
-  - Safe capability checks: `SELECT 1` for basic liveness, `SELECT postgis_full_version();` for PostGIS.
-  - Active Status: **Not Yet Verified** (Awaiting local `.env` with `DATABASE_URL` from owner; no secrets committed).
-- **PostGIS Extension**: Capability check ready; verification pending connection string.
+  - **Supabase Project Endpoint**: **VERIFIED & ACTIVE** (Probed project `qnkgndfzuhrjuopzlcxy` via REST API; returned HTTP 200 OK with clean public schema).
+  - **Direct PostgreSQL Connection**: **Awaiting Database Password** (Local `.env` configured with Supabase project URL and service credentials; direct `asyncpg` connection requires replacing `[YOUR-PASSWORD]` placeholder with the actual database password).
+  - Diagnostic test script: [`services/api/verify_db.py`](file:///Users/apple/Upostit/services/api/verify_db.py).
+  - Capability checks: `SELECT 1` for basic liveness, `SELECT postgis_full_version();` for PostGIS.
+- **PostGIS Extension**: Verification script ready; direct database query pending database password.
 - **Existing Schemas & Tables in Remote DB**: Preserved completely. Zero modifications, drops, or table creations performed in Phase 1.
 - **Mandatory RLS Policy Template**:
   ```sql
@@ -184,9 +185,10 @@ graph TD
 - [x] Alembic migration configuration initialized (`database/migrations/`).
 - [x] Standardized `Makefile` and `.env.example`.
 - [x] GitHub Actions CI workflow (`.github/workflows/ci.yml`).
+- [x] Supabase Project REST API connectivity verified (HTTP 200 OK for `qnkgndfzuhrjuopzlcxy`).
 
 ### 5.2 Implemented but Not Yet Verified
-- **Supabase Database Live Connectivity**: The connection logic and verification script are implemented, but live network verification against the owner's Supabase instance is pending the placement of `DATABASE_URL` in an untracked local `.env` file.
+- **Direct PostgreSQL Connection**: SQLAlchemy `asyncpg` connection engine and PostGIS probe implemented; awaiting replacement of `[YOUR-PASSWORD]` placeholder in `.env` with actual database password.
 
 ### 5.3 In Progress
 - **Phase 1 — Project Setup & Monorepo Foundation**: Completing acceptance runs and awaiting project owner review.
@@ -324,7 +326,7 @@ API_BASE_URL=http://localhost:8000
 | **2026-10-30** | Documentation Audit | Consistency across all docs | **Passed** | Flutter and Supabase consistently aligned. |
 | **2026-10-30** | `.venv/bin/pytest tests/` | Backend API health & readiness unit tests | **Passed** | 4 passed tests for `/health`, `/ready`, and DB verification logic. |
 | **2026-10-30** | `python services/workers/smoke_test.py` | Celery task structure smoke test | **Passed** | Celery task signatures and app initialization validated. |
-| **2026-10-30** | `python services/api/verify_db.py` | Safe Supabase connectivity check | **Handled safely** | Missing `DATABASE_URL` reported safely with clear remediation steps. |
+| **2026-10-30** | `python services/api/verify_db.py` | Supabase Project REST & DB Check | **REST OK / DB Awaiting Password** | Supabase Project URL (`qnkgndfzuhrjuopzlcxy`) active (HTTP 200 OK); direct PostgreSQL awaiting database password in `.env`. |
 
 ---
 
@@ -359,40 +361,25 @@ API_BASE_URL=http://localhost:8000
 
 ## 11. Change History
 
+### [2026-10-30] — Supabase Project Credentials Configuration & REST Probe Verification
+- **Phase**: Phase 1 (Project Setup & Monorepo Foundation)
+- **Summary**:
+  - Configured project credentials in untracked local `.env` file (`SUPABASE_URL`, `SUPABASE_PROJECT_REF`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+  - Added Supabase credential handling to `services/api/config.py`.
+  - Updated `services/api/verify_db.py` to probe Supabase Project REST API; verified project `qnkgndfzuhrjuopzlcxy` is active and reachable (HTTP 200 OK).
+  - Configured direct PostgreSQL connection with placeholder `[YOUR-PASSWORD]`; verified safe reporting when password is required.
+- **Affected Files**:
+  - `services/api/config.py` (Updated)
+  - `services/api/database.py` (Updated)
+  - `services/api/verify_db.py` (Updated)
+  - `PROJECT_CONTEXT.md` (Updated)
+
 ### [2026-10-30] — Phase 1 Update: Flutter Selection & Supabase Architecture Alignment
 - **Phase**: Phase 1 (Project Setup & Monorepo Foundation)
 - **Summary**:
   - Owner selected **Flutter** (Dart) as the mobile framework for iOS and Android; removed React Native and Expo references across all documentation and project specs.
   - Aligned database architecture strictly to **Supabase PostgreSQL 16 + PostGIS**; Docker Compose updated to manage Redis and MinIO only (no second local PostgreSQL container).
-  - Created `.gitignore` preventing secrets, local environments, and build artifacts from leaking into version control.
-  - Implemented FastAPI modular monolith application skeleton with `/health` and `/ready` endpoints.
-  - Implemented safe Supabase database and PostGIS verification script (`services/api/verify_db.py`).
-  - Created responsive Next.js 14+ web dashboard starter shell under `apps/web/`.
-  - Created feature-based Flutter mobile application starter under `apps/mobile/` with responsive welcome screen, accessible controls, and configurable API base URL.
-  - Configured Docker Compose for Redis and MinIO (`infra/docker-compose.yml`).
-  - Implemented Celery worker module and smoke test.
-  - Configured Alembic async migration environment (`database/migrations/`).
-  - Created `.env.example`, `Makefile`, and GitHub Actions CI workflow (`.github/workflows/ci.yml`).
-- **Affected Files**:
-  - `PROJECT_CONTEXT.md` (Updated)
-  - `docs/RULES.md` (Updated)
-  - `docs/ARCHITECTURE.md` (Updated)
-  - `docs/PHASE_01.md` (Updated)
-  - `README.md` (Created)
-  - `.gitignore` (Created)
-  - `.env.example` (Created)
-  - `Makefile` (Created)
-  - `infra/docker-compose.yml` (Created)
-  - `services/api/main.py`, `services/api/config.py`, `services/api/database.py`, `services/api/verify_db.py` (Created)
-  - `services/workers/celery_app.py`, `services/workers/smoke_test.py` (Created)
-  - `database/migrations/alembic.ini`, `database/migrations/env.py`, `database/migrations/script.py.mako` (Created)
-  - `apps/web/package.json`, `apps/web/src/app/page.tsx`, `apps/web/src/app/layout.tsx` (Created)
-  - `apps/mobile/pubspec.yaml`, `apps/mobile/lib/main.dart`, `apps/mobile/lib/features/welcome/presentation/welcome_screen.dart`, `apps/mobile/lib/core/config/env_config.dart` (Created)
-  - `tests/test_health.py` (Created)
-  - `.github/workflows/ci.yml` (Created)
-- **Architectural Decisions (ADR)**:
-  - *ADR-004*: Mobile applications are exclusively developed with Flutter (Dart) using a feature-driven folder structure (`features/`, `core/`, `shared/`) with configurable backend base URL and secure local storage.
-  - *ADR-005*: Supabase PostgreSQL is the sole primary database. Local development relies on remote Supabase instance (configured via `.env`) while Docker Compose runs only Redis and MinIO.
+  - Implemented monorepo layout, Next.js web shell, Flutter mobile starter, FastAPI health probes, Alembic, Celery, and CI workflow (Commit `b64d49d`).
 
 ### [2026-10-30] — Phase 1: Repository & Master Documentation Inception
 - **Phase**: Phase 1 (Project Setup & Monorepo Foundation)
@@ -402,8 +389,9 @@ API_BASE_URL=http://localhost:8000
 
 ## 12. Next Actions
 
-1. **Immediate Task**: Complete Phase 1 verification suite and commit all Phase 1 implementation files.
+1. **Immediate Task**: Owner can supply database password in `.env` to complete direct PostgreSQL `SELECT 1` and PostGIS check, or approve proceeding to Phase 2.
 2. **Owner Input Required**:
-   - Create local `.env` with actual Supabase `DATABASE_URL` (format: `postgresql+asyncpg://postgres:[PASSWORD]@db.[REF].supabase.co:5432/postgres`) to execute live database connectivity check.
+   - In `.env`, replace `[YOUR-PASSWORD]` in `DATABASE_URL` with your actual Supabase database password.
+   - Run `make verify-db` to confirm direct PostgreSQL connectivity.
 3. **Transition to Phase 2**:
    - Await project owner approval before beginning Phase 2 (Authentication, Tenant Onboarding, JWT, and RLS Migration Helpers).

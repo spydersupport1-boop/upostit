@@ -18,20 +18,23 @@ logger = logging.getLogger(__name__)
 engine: AsyncEngine | None = None
 AsyncSessionLocal: async_sessionmaker[AsyncSession] | None = None
 
-if settings.DATABASE_URL:
-    engine = create_async_engine(
-        settings.DATABASE_URL,
-        pool_size=settings.DB_POOL_SIZE,
-        max_overflow=settings.DB_MAX_OVERFLOW,
-        pool_timeout=settings.DB_POOL_TIMEOUT,
-        echo=settings.DB_ECHO,
-        pool_pre_ping=True,
-    )
-    AsyncSessionLocal = async_sessionmaker(
-        bind=engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
+if settings.DATABASE_URL and "[YOUR-PASSWORD]" not in settings.DATABASE_URL:
+    try:
+        engine = create_async_engine(
+            settings.DATABASE_URL,
+            pool_size=settings.DB_POOL_SIZE,
+            max_overflow=settings.DB_MAX_OVERFLOW,
+            pool_timeout=settings.DB_POOL_TIMEOUT,
+            echo=settings.DB_ECHO,
+            pool_pre_ping=True,
+        )
+        AsyncSessionLocal = async_sessionmaker(
+            bind=engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+    except Exception as e:
+        logger.warning("Could not initialize database engine: %s", type(e).__name__)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -47,8 +50,8 @@ async def check_database_connection() -> tuple[bool, str]:
     Executes a safe read-only SELECT 1 query to verify database connectivity.
     Never exposes passwords, tokens, or connection strings in responses.
     """
-    if not settings.DATABASE_URL:
-        return False, "DATABASE_URL is not configured in environment"
+    if not settings.DATABASE_URL or "[YOUR-PASSWORD]" in settings.DATABASE_URL:
+        return False, "DATABASE_URL is not fully configured (contains placeholder [YOUR-PASSWORD])"
 
     if engine is None:
         return False, "Database engine is not initialized"

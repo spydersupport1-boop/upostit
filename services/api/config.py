@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     API_PORT: int = Field(default=8000)
     API_HOST: str = Field(default="0.0.0.0")
 
+    # Supabase Project Credentials
+    SUPABASE_URL: str = Field(default="")
+    SUPABASE_PROJECT_REF: str = Field(default="")
+    SUPABASE_ANON_KEY: str = Field(default="")
+    SUPABASE_SERVICE_ROLE_KEY: str = Field(default="")
+
     # Supabase PostgreSQL Connection
     DATABASE_URL: str = Field(default="")
     DB_POOL_SIZE: int = Field(default=10)
