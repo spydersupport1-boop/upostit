@@ -324,12 +324,25 @@ API_BASE_URL=http://localhost:8000
 ### 9.1 Test Execution Record
 | Date | Test Suite / Command | Scope | Actual Result | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **2026-10-30** | `git status` | Git repository initialization | **Passed** | Clean repository state. |
-| **2026-10-30** | Documentation Audit | Consistency across all docs | **Passed** | Flutter and Supabase consistently aligned. |
-| **2026-10-30** | `.venv/bin/pytest tests/` | Backend API health & readiness unit tests | **Passed** | 4 passed tests for `/health`, `/ready`, and DB verification logic. |
-| **2026-10-30** | `python services/workers/smoke_test.py` | Celery task structure smoke test | **Passed** | Celery task signatures and app initialization validated. |
-| **2026-10-30** | `make verify-db` | Supabase Project, PostgreSQL & PostGIS Check | **Passed (All OK)** | Supabase Project (`qnkgndfzuhrjuopzlcxy`) active (HTTP 200 OK); direct PostgreSQL `SELECT 1` passed; PostGIS capability verified. |
-| **2026-10-30** | `GET /ready` (FastAPI) | Deep readiness probe with live Supabase DB | **Passed (HTTP 200)** | Returns `database: connected`, `postgis: PostGIS available`. |
+| **2026-10-30** | `git status --short`, `git log -5` | Git repository & baseline state | **Passed** | Clean repository baseline; untracked `.env` strictly ignored. |
+| **2026-10-30** | `git ls-files --error-unmatch .env` | Secret isolation & git tracking | **Passed (Exit code 1)** | Confirmed `.env` is completely untracked by Git; zero secrets exposed. |
+| **2026-10-30** | `make verify-db` (Step 1) | Supabase Project REST API | **Passed (HTTP 200)** | Probed endpoint `https://qnkgndfzuhrjuopzlcxy.supabase.co`; verified project active. |
+| **2026-10-30** | `make verify-db` (Step 2) | Direct PostgreSQL connection | **Passed (SELECT 1)** | Safe query executed via SQLAlchemy 2 async engine with `asyncpg`. |
+| **2026-10-30** | `make verify-db` (Step 3) | PostGIS spatial capability | **Passed (Operational)**| `SELECT postgis_full_version();` executed and confirmed available. |
+| **2026-10-30** | `make test` (`pytest tests/ -v`) | Backend API health & readiness unit tests | **Passed (4/4)** | 4 passed in 5.70s (0 failed, 0 skipped). |
+| **2026-10-30** | `make lint` (`ruff check`) | Backend Python code linter | **Passed (Clean)** | All checks passed across `services/`, `packages/`, `tests/`. |
+| **2026-10-30** | `make lint` (`mypy services/api/`) | Backend static type checker | **Passed (Clean)** | Success: no issues found in 5 source files. |
+| **2026-10-30** | Live ASGI probe `/health` & `/ready` | FastAPI live endpoint verification | **Passed (HTTP 200)** | `/health` returned 200 OK; `/ready` returned 200 OK (`database: connected`, `postgis: PostGIS available`). |
+| **2026-10-30** | `make celery-smoke` | Celery configuration smoke test | **Passed** | Task `attendance.ping` registered; direct invocation returned `'pong'`. |
+| **2026-10-30** | Celery live broker connection | Redis task queue consumer | **Blocked** | Local Redis container not running; Docker is not installed on host machine. |
+| **2026-10-30** | `npm run build` in `apps/web/` | Next.js production build | **Passed** | Next.js 14.2.5 compiled successfully; static pages generated (4/4). |
+| **2026-10-30** | `npm run lint` in `apps/web/` | Web ESLint validation | **Passed** | `✔ No ESLint warnings or errors`. |
+| **2026-10-30** | `npx tsc --noEmit` in `apps/web/` | Web TypeScript compilation | **Passed** | Exited code 0 with zero type errors. |
+| **2026-10-30** | `.venv/bin/alembic current` & `heads`| Alembic migration loader | **Passed** | Loaded root `alembic.ini` and PostgreSQL migration environment cleanly (`PostgresqlImpl`). |
+| **2026-10-30** | Flutter host binary check | `which flutter`, `which dart` | **Blocked** | `flutter` and `dart` not installed on host macOS (`brew install --cask flutter` needed). |
+| **2026-10-30** | Flutter mobile code inspection | Mobile app architecture & security | **Passed** | Valid entrypoint, welcome screen, compile-time `--dart-define=API_BASE_URL`, real widget test. |
+| **2026-10-30** | Docker host binary check | `which docker`, `which docker-compose` | **Blocked** | `docker` not installed on host macOS; container execution blocked locally. |
+| **2026-10-30** | CI Workflow YAML syntax check | GitHub Actions workflow audit | **Passed** | Valid YAML; 4 jobs configured: `backend-checks`, `web-checks`, `mobile-checks`, `security-scans`. |
 
 ---
 
@@ -337,7 +350,7 @@ API_BASE_URL=http://localhost:8000
 
 | Phase | Stage | Name & Core Objective | Status | Completion Criteria & Evidence |
 | :---: | :--- | :--- | :---: | :--- |
-| **01** | Stage A | **Project Setup & Monorepo Foundation** | **Implemented** | Monorepo layout, Docker Compose (Redis+MinIO), FastAPI skeleton (`/health`, `/ready`), Next.js & Flutter starters, Supabase PostgreSQL + PostGIS verified, CI workflow, `PROJECT_CONTEXT.md`. Awaiting owner sign-off. |
+| **01** | Stage A | **Project Setup & Monorepo Foundation** | **Audited** | Monorepo layout, Next.js web build (passed), Flutter starter (ready), FastAPI (`/health`, `/ready` passed), Supabase PostgreSQL + PostGIS verified, Alembic loader verified, CI workflow (4 jobs). Docker & Flutter CLI blocked on host tooling. Conditionally ready for Phase 2. |
 | **02** | Stage A | **Auth and Tenants** | **Not Started** | Tenant registration, Argon2, JWT tokens, RBAC permissions, RLS migration helper, cross-tenant leak tests. |
 | **03** | Stage A | **Platform Basics** | **Not Started** | Audit logging service, tenant settings, UTC helpers, feature flags, Redis rate limiter middleware. |
 | **04** | Stage B | **Employees & Workplaces** | **Not Started** | Employee CRUD, departments, PostGIS locations (`ST_DWithin`), CSV import Celery worker, invite flow. |
@@ -364,6 +377,28 @@ API_BASE_URL=http://localhost:8000
 
 ## 11. Change History
 
+### [2026-10-30] — Phase 1 Final Verification & Acceptance Audit
+- **Phase**: Phase 1 (Project Setup & Monorepo Foundation)
+- **Summary**:
+  - Performed comprehensive, evidence-based final audit across all repository subsystems.
+  - Resolved root `alembic.ini` configuration to allow Alembic to load directly from repository root.
+  - Configured standard Next.js ESLint configuration (`apps/web/.eslintrc.json`, `package.json`) and verified `npm run build`, `npm run lint`, and `npx tsc --noEmit` pass with zero errors.
+  - Added web build and web lint targets to `Makefile`.
+  - Expanded GitHub Actions CI workflow (`.github/workflows/ci.yml`) to include `web-checks` and `mobile-checks` alongside `backend-checks` and `security-scans`.
+  - Confirmed Git secret isolation (`.env` strictly untracked).
+  - Documented blocked status for Docker-dependent services (local Redis/MinIO containers) and Flutter CLI execution due to missing host binaries (`docker`, `flutter`).
+- **Affected Files**:
+  - `alembic.ini` (Created)
+  - `apps/web/.eslintrc.json` (Created)
+  - `apps/web/package.json` (Updated)
+  - `apps/web/package-lock.json` (Updated)
+  - `.gitignore` (Updated to ignore `*.tsbuildinfo`)
+  - `.env.example` (Updated with Supabase REST keys)
+  - `Makefile` (Added `web-build` and `web-lint`)
+  - `.github/workflows/ci.yml` (Added `web-checks` and `mobile-checks`)
+  - `docs/PHASE_01.md` (Updated with audit table)
+  - `PROJECT_CONTEXT.md` (Updated with audit table and change history)
+
 ### [2026-10-30] — Supabase PostgreSQL Direct Connection & PostGIS Capability Verified
 - **Phase**: Phase 1 (Project Setup & Monorepo Foundation)
 - **Summary**:
@@ -371,7 +406,6 @@ API_BASE_URL=http://localhost:8000
   - Executed safe direct connection check using SQLAlchemy 2 async engine with `asyncpg` (`SELECT 1`); verified successfully.
   - Enabled and verified PostGIS extension in Supabase PostgreSQL (`SELECT postgis_full_version();`).
   - Validated FastAPI `/ready` probe against live Supabase database returning HTTP 200 OK (`database: connected`, `postgis: PostGIS available`).
-  - Phase 1 scope fully implemented and verified; status transitioned to **Implemented** awaiting owner approval.
 - **Affected Files**:
   - `PROJECT_CONTEXT.md` (Updated)
   - `docs/PHASE_01.md` (Updated)
@@ -398,7 +432,7 @@ API_BASE_URL=http://localhost:8000
 
 ## 12. Next Actions
 
-1. **Immediate Task**: Owner review and approval to mark Phase 1 **Verified** and transition to Phase 2.
-2. **Transition to Phase 2**:
+1. **Immediate Task**: Present Phase 1 Final Audit Report to project owner and obtain sign-off for Phase 2.
+2. **Transition to Phase 2 (Upon Approval)**:
    - Begin **Phase 2 — Auth and Tenants** on branch `phase-02`.
    - Core deliverables: Tenant registration, user login, Argon2id password hashing, JWT token lifecycle (access + rotating refresh tokens), role-based access control (owner, admin, hr, manager, employee), per-request `SET LOCAL app.tenant_id = :tenant_id` middleware, and automated cross-tenant isolation test suite.
