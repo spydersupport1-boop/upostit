@@ -3,12 +3,14 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import FastAPI, status
+from fastapi import APIRouter, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from services.api.auth.routes import router as auth_router
 from services.api.config import settings
 from services.api.database import check_database_connection, check_postgis_capability
+from services.api.tenants.routes import router as tenants_router
 
 app = FastAPI(
     title="Attendance SaaS API",
@@ -22,11 +24,20 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.ENVIRONMENT == "development" else ["https://app.upostit.com"],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS
+    if settings.ENVIRONMENT != "production"
+    else ["https://app.upostit.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# API v1 Router
+api_v1_router = APIRouter(prefix="/api/v1")
+api_v1_router.include_router(auth_router)
+api_v1_router.include_router(tenants_router)
+
+app.include_router(api_v1_router)
 
 
 @app.get(

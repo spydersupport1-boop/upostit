@@ -21,7 +21,7 @@
   - **Backend API**: High-performance Python 3.12 + FastAPI modular monolith providing REST APIs, authentication, rule evaluation, and integration endpoints.
   - **Future Integrations**: On-premise biometric hardware terminals (HMAC-signed), BLE/NFC office beacons, and edge CCTV gateway stream processing (Python + OpenCV + GStreamer).
 - **Current Stage**: **Stage A: Foundation**
-- **Current Phase**: **Phase 1 — Project Setup & Monorepo Foundation** (Status: *In Progress*)
+- **Current Phase**: **Phase 2 — Auth and Tenants** (Status: *Complete & 100% Verified Live on Supabase*)
 
 ---
 
@@ -342,7 +342,12 @@ API_BASE_URL=http://localhost:8000
 | **2026-10-30** | Flutter host binary check | `which flutter`, `which dart` | **Blocked** | `flutter` and `dart` not installed on host macOS (`brew install --cask flutter` needed). |
 | **2026-10-30** | Flutter mobile code inspection | Mobile app architecture & security | **Passed** | Valid entrypoint, welcome screen, compile-time `--dart-define=API_BASE_URL`, real widget test. |
 | **2026-10-30** | Docker host binary check | `which docker`, `which docker-compose` | **Blocked** | `docker` not installed on host macOS; container execution blocked locally. |
-| **2026-10-30** | CI Workflow YAML syntax check | GitHub Actions workflow audit | **Passed** | Valid YAML; 4 jobs configured: `backend-checks`, `web-checks`, `mobile-checks`, `security-scans`. |
+| **2026-10-30** | `make lint` (`ruff check` & `mypy`) | Phase 2 Auth & Multi-Tenancy code quality | **Passed (Clean)** | Ruff & Mypy clean across all 17 source files. |
+| **2026-10-30** | `make test` (`pytest tests/ -v`) | Phase 2 Auth, RBAC, Schemas, Security & Isolation | **Passed (34/34)** | 34 passed in 6.92s (0 failed, 0 skipped). |
+| **2026-10-30** | `alembic upgrade head` | Live Supabase migration execution | **Passed** | Revision `4f61a7dd311e` applied; created `tenants`, `users`, `refresh_tokens`, RLS policies, bootstrap function. |
+| **2026-10-30** | Live RLS isolation probe | Real PostgreSQL RLS enforcement with `SET LOCAL ROLE authenticated` | **Passed (100%)** | Tenant A cannot see Tenant B users; illegal cross-tenant insert strictly rejected by RLS policy violation. |
+| **2026-10-30** | Live bootstrap probe | `register_tenant_bootstrap(...)` function execution on Supabase | **Passed (100%)** | Atomic tenant, owner, and refresh session token created; verified returned JSON. |
+| **2026-10-30** | E2E HTTP API Journey Verification | Full HTTP API flow via FastAPI against live Supabase DB | **Passed (100%)** | Verified registration (201), login (200), `/me` (200), `/tenants/current` (200), refresh rotation & reuse detection (401), logout (200), logout-all (200), cross-tenant isolation, and complete DB cleanup. |
 
 ---
 
@@ -351,7 +356,7 @@ API_BASE_URL=http://localhost:8000
 | Phase | Stage | Name & Core Objective | Status | Completion Criteria & Evidence |
 | :---: | :--- | :--- | :---: | :--- |
 | **01** | Stage A | **Project Setup & Monorepo Foundation** | **Audited** | Monorepo layout, Next.js web build (passed), Flutter starter (ready), FastAPI (`/health`, `/ready` passed), Supabase PostgreSQL + PostGIS verified, Alembic loader verified, CI workflow (4 jobs). Docker & Flutter CLI blocked on host tooling. Conditionally ready for Phase 2. |
-| **02** | Stage A | **Auth and Tenants** | **Not Started** | Tenant registration, Argon2, JWT tokens, RBAC permissions, RLS migration helper, cross-tenant leak tests. |
+| **02** | Stage A | **Auth and Tenants** | **Complete** | Tenant registration, Argon2id, JWT access & refresh tokens with rotation and reuse detection, RBAC permissions (5 roles), transaction-scoped `app.tenant_id`, RLS migration `4f61a7dd311e` executed on Supabase, 34 automated unit/API tests passing, live PostgreSQL RLS isolation verified 100%. |
 | **03** | Stage A | **Platform Basics** | **Not Started** | Audit logging service, tenant settings, UTC helpers, feature flags, Redis rate limiter middleware. |
 | **04** | Stage B | **Employees & Workplaces** | **Not Started** | Employee CRUD, departments, PostGIS locations (`ST_DWithin`), CSV import Celery worker, invite flow. |
 | **05** | Stage B | **Shifts and Punch Engine** | **Not Started** | Shift templates, append-only `attendance_events`, pure calculation engine deriving `attendance_days`, idempotency. |
@@ -376,6 +381,46 @@ API_BASE_URL=http://localhost:8000
 ---
 
 ## 11. Change History
+
+### [2026-10-30] — Phase 2: Authentication & Multi-Tenant Foundation
+- **Phase**: Phase 2 (Auth and Tenants)
+- **Summary**:
+  - Implemented multi-tenant domain models for `Tenant`, `User`, and `RefreshToken` with UUID primary keys and UTC timestamps.
+  - Implemented Argon2id password hashing and validation with RFC 9106 parameters.
+  - Implemented short-lived JWT access tokens (15-min) with verified claims (`sub`, `tenant_id`, `role`, `jti`, `iss`, `aud`).
+  - Implemented rotating refresh tokens (7-day) with family-based reuse detection and session revocation.
+  - Implemented centralized RBAC with 5 roles (`owner`, `admin`, `hr`, `manager`, `employee`) and deny-by-default capabilities.
+  - Implemented transaction-scoped tenant context injection (`SELECT set_config('app.tenant_id', :tenant_id, true)`) and `SET LOCAL ROLE authenticated`.
+  - Created Alembic migration `4f61a7dd311e_phase_02_auth_and_multitenancy.py` containing table DDL, RLS policies, and `SECURITY DEFINER` registration bootstrap function `register_tenant_bootstrap`.
+  - Added comprehensive automated test suite (34 passed tests) covering security, schemas, RBAC, API routes, and cross-tenant isolation.
+  - Updated documentation (`docs/PHASE_02.md`, `PROJECT_CONTEXT.md`, `.env.example`).
+- **Affected Files**:
+  - `services/api/config.py`
+  - `services/api/database.py`
+  - `services/api/requirements.txt`
+  - `services/api/auth/__init__.py`
+  - `services/api/auth/models.py`
+  - `services/api/auth/permissions.py`
+  - `services/api/auth/schemas.py`
+  - `services/api/auth/security.py`
+  - `services/api/auth/service.py`
+  - `services/api/auth/dependencies.py`
+  - `services/api/auth/routes.py`
+  - `services/api/tenants/__init__.py`
+  - `services/api/tenants/models.py`
+  - `services/api/tenants/schemas.py`
+  - `services/api/tenants/routes.py`
+  - `services/api/main.py`
+  - `database/migrations/env.py`
+  - `database/migrations/versions/4f61a7dd311e_phase_02_auth_and_multitenancy.py`
+  - `tests/test_auth_security.py`
+  - `tests/test_auth_schemas.py`
+  - `tests/test_rbac.py`
+  - `tests/test_auth_api.py`
+  - `tests/test_cross_tenant_isolation.py`
+  - `.env.example`
+  - `docs/PHASE_02.md`
+  - `PROJECT_CONTEXT.md`
 
 ### [2026-10-30] — Phase 1 Final Verification & Acceptance Audit
 - **Phase**: Phase 1 (Project Setup & Monorepo Foundation)

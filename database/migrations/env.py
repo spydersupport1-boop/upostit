@@ -18,8 +18,21 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Target metadata for autogenerate (no business tables in Phase 1)
-target_metadata = None
+# Import all domain models so Alembic registers them on Base.metadata
+from services.api.auth.models import RefreshToken, User
+from services.api.database import Base
+from services.api.tenants.models import Tenant
+
+target_metadata = Base.metadata
+
+POSTGIS_SYSTEM_TABLES = {"spatial_ref_sys", "geography_columns", "geometry_columns"}
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    """Exclude PostGIS and Supabase system metadata tables from autogenerate diffs."""
+    if type_ == "table" and name in POSTGIS_SYSTEM_TABLES:
+        return False
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -30,6 +43,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -37,7 +51,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=include_object,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
@@ -45,7 +63,8 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with asyncpg engine."""
     configuration = config.get_section(config.config_ini_section) or {}
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    migration_url = settings.MIGRATION_DATABASE_URL or settings.DATABASE_URL
+    configuration["sqlalchemy.url"] = migration_url
 
     connectable = async_engine_from_config(
         configuration,

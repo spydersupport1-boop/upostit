@@ -1,6 +1,7 @@
 """Application configuration module using pydantic-settings."""
 
 import os
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,7 +45,30 @@ class Settings(BaseSettings):
     STORAGE_BUCKET: str = Field(default="attendance-assets")
     STORAGE_USE_SSL: bool = Field(default=False)
 
-    @field_validator("DATABASE_URL", mode="before")
+    # Authentication & Security (Phase 2)
+    JWT_SECRET_KEY: str = Field(default="")
+    JWT_ALGORITHM: str = Field(default="HS256")
+    JWT_ISSUER: str = Field(default="attendance-saas")
+    JWT_AUDIENCE: str = Field(default="attendance-app")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
+    CORS_ALLOWED_ORIGINS: list[str] = Field(
+        default=["http://localhost:3000", "http://localhost:8000"]
+    )
+    COOKIE_SECURE: bool = Field(default=False)
+    COOKIE_SAMESITE: Literal["lax", "strict", "none"] = Field(default="lax")
+    COOKIE_DOMAIN: str | None = Field(default=None)
+
+    # Database Security & RLS Execution (Phase 2)
+    MIGRATION_DATABASE_URL: str = Field(default="")
+    RUNTIME_DATABASE_ROLE: str = Field(default="authenticated")
+
+    @property
+    def effective_jwt_secret(self) -> str:
+        """Returns the configured JWT_SECRET_KEY, falling back to SECRET_KEY."""
+        return self.JWT_SECRET_KEY if self.JWT_SECRET_KEY else self.SECRET_KEY
+
+    @field_validator("DATABASE_URL", "MIGRATION_DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:
         if not v:

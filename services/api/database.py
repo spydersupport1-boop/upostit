@@ -10,10 +10,18 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import DeclarativeBase
 
 from services.api.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class Base(DeclarativeBase):
+    """Base declarative class for all SQLAlchemy 2 domain models."""
+
+    pass
+
 
 engine: AsyncEngine | None = None
 AsyncSessionLocal: async_sessionmaker[AsyncSession] | None = None
@@ -43,6 +51,26 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         raise RuntimeError("DATABASE_URL is not configured. Database session unavailable.")
     async with AsyncSessionLocal() as session:
         yield session
+
+
+async def set_tenant_context(
+    session: AsyncSession,
+    tenant_id: str,
+    enforce_rls_role: bool = True,
+) -> None:
+    """
+    Sets transaction-local tenant context for PostgreSQL Row-Level Security.
+    Uses parameterized `set_config('app.tenant_id', :tenant_id, true)` (is_local=True).
+    Optionally sets `SET LOCAL ROLE <role>` (e.g. 'authenticated') to ensure roles with
+    `rolbypassrls` cannot bypass RLS policies during tenant queries.
+    """
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+        {"tenant_id": str(tenant_id)},
+    )
+    if enforce_rls_role and settings.RUNTIME_DATABASE_ROLE:
+        safe_role = settings.RUNTIME_DATABASE_ROLE.strip().replace(";", "")
+        await session.execute(text(f"SET LOCAL ROLE {safe_role}"))
 
 
 async def check_database_connection() -> tuple[bool, str]:
