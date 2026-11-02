@@ -1,6 +1,6 @@
 # Attendance SaaS Makefile
 
-.PHONY: help up down test lint clean verify-db celery-smoke web-build web-lint
+.PHONY: help up down test lint clean verify-db celery-smoke web-build web-lint web-test
 
 PYTHON := python3
 VENV_BIN := .venv/bin
@@ -16,6 +16,7 @@ help:
 	@echo "  make celery-smoke Run Celery worker configuration smoke test"
 	@echo "  make web-build    Build Next.js web application"
 	@echo "  make web-lint     Run ESLint on web application"
+	@echo "  make web-test     Run frontend tests (node test runner)"
 	@echo "  make clean        Remove cache and temporary build files"
 
 up:
@@ -42,6 +43,10 @@ web-build:
 
 web-lint:
 	cd apps/web && npm run lint
+
+web-test:
+	cd apps/web && npm test
+
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

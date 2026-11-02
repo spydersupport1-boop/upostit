@@ -10,6 +10,11 @@ from fastapi.responses import JSONResponse
 from services.api.auth.routes import router as auth_router
 from services.api.config import settings
 from services.api.database import check_database_connection, check_postgis_capability
+from services.api.employees.routes import router as employees_router
+from services.api.organization.routes import (
+    departments_router,
+    designations_router,
+)
 from services.api.tenants.routes import router as tenants_router
 
 app = FastAPI(
@@ -36,6 +41,9 @@ app.add_middleware(
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(tenants_router)
+api_v1_router.include_router(departments_router)
+api_v1_router.include_router(designations_router)
+api_v1_router.include_router(employees_router)
 
 app.include_router(api_v1_router)
 

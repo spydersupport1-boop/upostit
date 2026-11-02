@@ -49,6 +49,7 @@ class User(Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "email", name="uq_users_tenant_email"),
+        UniqueConstraint("tenant_id", "id", name="uq_users_tenant_id"),
         Index("ix_users_tenant_role", "tenant_id", "role"),
     )
 

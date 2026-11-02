@@ -40,13 +40,19 @@ from services.api.tenants.schemas import TenantResponse
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+def _is_cookie_secure() -> bool:
+    if settings.ENVIRONMENT == "production":
+        return True
+    return settings.COOKIE_SECURE
+
+
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
     """Sets a secure HTTP-only refresh token cookie for web clients."""
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=settings.COOKIE_SECURE,
+        secure=_is_cookie_secure(),
         samesite=settings.COOKIE_SAMESITE,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         domain=settings.COOKIE_DOMAIN,
@@ -60,6 +66,9 @@ def _clear_refresh_cookie(response: Response) -> None:
         key="refresh_token",
         path="/api/v1/auth",
         domain=settings.COOKIE_DOMAIN,
+        httponly=True,
+        secure=_is_cookie_secure(),
+        samesite=settings.COOKIE_SAMESITE,
     )
 
 

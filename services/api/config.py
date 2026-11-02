@@ -53,7 +53,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
     CORS_ALLOWED_ORIGINS: list[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8000"]
+        default=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
     )
     COOKIE_SECURE: bool = Field(default=False)
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = Field(default="lax")

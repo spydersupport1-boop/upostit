@@ -21,6 +21,14 @@ class Permission(StrEnum):
     MANAGE_USERS = "manage_users"
     ASSIGN_ROLES = "assign_roles"
     VIEW_OWN_PROFILE = "view_own_profile"
+    # Organization Structure Permissions
+    MANAGE_ORGANIZATION = "manage_organization"
+    VIEW_ORGANIZATION = "view_organization"
+    # Employee Management Permissions
+    CREATE_EMPLOYEES = "create_employees"
+    VIEW_EMPLOYEES = "view_employees"
+    UPDATE_EMPLOYEES = "update_employees"
+    DEACTIVATE_EMPLOYEES = "deactivate_employees"
 
 
 # Role-to-Permissions Mapping (Deny by default)
@@ -31,6 +39,12 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.MANAGE_USERS,
         Permission.ASSIGN_ROLES,
         Permission.VIEW_OWN_PROFILE,
+        Permission.MANAGE_ORGANIZATION,
+        Permission.VIEW_ORGANIZATION,
+        Permission.CREATE_EMPLOYEES,
+        Permission.VIEW_EMPLOYEES,
+        Permission.UPDATE_EMPLOYEES,
+        Permission.DEACTIVATE_EMPLOYEES,
     },
     UserRole.ADMIN: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -38,18 +52,32 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.MANAGE_USERS,
         Permission.ASSIGN_ROLES,
         Permission.VIEW_OWN_PROFILE,
+        Permission.MANAGE_ORGANIZATION,
+        Permission.VIEW_ORGANIZATION,
+        Permission.CREATE_EMPLOYEES,
+        Permission.VIEW_EMPLOYEES,
+        Permission.UPDATE_EMPLOYEES,
+        Permission.DEACTIVATE_EMPLOYEES,
     },
     UserRole.HR: {
         Permission.VIEW_COMPANY_PROFILE,
         Permission.MANAGE_USERS,
         Permission.VIEW_OWN_PROFILE,
+        Permission.VIEW_ORGANIZATION,
+        Permission.CREATE_EMPLOYEES,
+        Permission.VIEW_EMPLOYEES,
+        Permission.UPDATE_EMPLOYEES,
+        Permission.DEACTIVATE_EMPLOYEES,
     },
     UserRole.MANAGER: {
         Permission.VIEW_COMPANY_PROFILE,
         Permission.VIEW_OWN_PROFILE,
+        Permission.VIEW_ORGANIZATION,
+        Permission.VIEW_EMPLOYEES,
     },
     UserRole.EMPLOYEE: {
         Permission.VIEW_OWN_PROFILE,
+        Permission.VIEW_ORGANIZATION,
     },
 }
 

@@ -20,8 +20,8 @@
   - **Mobile Application**: **Flutter (Android & iOS)** native cross-platform employee app written in Dart for geofenced check-in/out, selfie verification, shift review, and leave requests.
   - **Backend API**: High-performance Python 3.12 + FastAPI modular monolith providing REST APIs, authentication, rule evaluation, and integration endpoints.
   - **Future Integrations**: On-premise biometric hardware terminals (HMAC-signed), BLE/NFC office beacons, and edge CCTV gateway stream processing (Python + OpenCV + GStreamer).
-- **Current Stage**: **Stage A: Foundation**
-- **Current Phase**: **Phase 2 — Auth and Tenants** (Status: *Complete & 100% Verified Live on Supabase*)
+- **Current Stage**: **Stage B: Attendance Core**
+- **Current Phase**: **Phase 4 — Employees & Workplaces (Locations, Geofencing, Batch Import & Invites)** (Status: *Implementation Plan Rev 2.0 Prepared in `docs/PHASE_04_PLAN.md` — Awaiting Owner Approval*)
 
 ---
 
@@ -348,6 +348,15 @@ API_BASE_URL=http://localhost:8000
 | **2026-10-30** | Live RLS isolation probe | Real PostgreSQL RLS enforcement with `SET LOCAL ROLE authenticated` | **Passed (100%)** | Tenant A cannot see Tenant B users; illegal cross-tenant insert strictly rejected by RLS policy violation. |
 | **2026-10-30** | Live bootstrap probe | `register_tenant_bootstrap(...)` function execution on Supabase | **Passed (100%)** | Atomic tenant, owner, and refresh session token created; verified returned JSON. |
 | **2026-10-30** | E2E HTTP API Journey Verification | Full HTTP API flow via FastAPI against live Supabase DB | **Passed (100%)** | Verified registration (201), login (200), `/me` (200), `/tenants/current` (200), refresh rotation & reuse detection (401), logout (200), logout-all (200), cross-tenant isolation, and complete DB cleanup. |
+| **2026-10-31** | `alembic upgrade head --sql` | Phase 3 migration offline validation | **Passed** | Revision `e6331816d336` generated & validated offline with composite tenant foreign keys on departments, designations, employees, and users. |
+| **2026-10-31** | `make test` (`pytest tests/ -v`) | Phase 3 Remediation: Self-access, Deactivation cascade, RBAC, Schemas | **Passed (65/65)** | 65 passed in 6.58s (0 failed, 0 skipped). 31 Phase 3 tests added/hardened. |
+| **2026-10-31** | `make lint` (`ruff check` & `mypy`) | Phase 3 Organization & Employee code quality | **Passed (Clean)** | Ruff clean across `services/`, `packages/`, `tests/`; Mypy clean across 27 source files. |
+| **2026-10-31** | `npm run lint` & `npm run build` | Next.js Organization & Employee dashboard + API client foundation | **Passed** | Next.js 14.2.5 compiled successfully; `/organization` static route (11.9 kB) created. 0 ESLint errors. |
+| **2026-11-01** | `alembic upgrade head` | Live Supabase Phase 3 migration execution | **Passed** | Revision `e6331816d336` applied live. Created `departments`, `designations`, `employees`, 5 composite FKs, composite unique constraints, forced RLS. Pre-migration records preserved. |
+| **2026-11-01** | Live Schema & Constraint Probe | Direct PostgreSQL system catalog query on Supabase | **Passed (100%)** | Verified `departments`, `designations`, `employees` exist, composite foreign keys active, `RLS_ENABLED=True, FORCE_RLS=True` active, isolation policies active. |
+| **2026-11-01** | Live Functional & Cross-Tenant Probe | Synthetic test tenants on live Supabase | **Passed (100%)** | Verified same-tenant relationships, circular dept-manager FK, nullable relationships, cross-tenant FK blocked (`IntegrityError`), RLS cross-tenant isolation verified. Clean cleanup confirmed. |
+| **2026-11-01** | Live E2E Phase 2 & Phase 3 Regression | Full FastAPI HTTP API flows against live Supabase | **Passed (100%)** | Registration (201), login (200), `/me` (200), refresh rotation & reuse detection (401), logout (200), Phase 3 department/designation/employee CRUD (201/200), clean cleanup verified. |
+| **2026-11-01** | Phase 3.3 HttpOnly Cookie Migration & Concurrency Lock | Live E2E API tests & frontend unit tests | **Passed (100%)** | Zero localStorage tokens; refresh token in HttpOnly cookie (`Path=/api/v1/auth`, `SameSite=lax`); access token in React memory; reload rehydration verified; active promise concurrency lock; 10/10 live checks passed, 19/19 web tests passed. |
 
 ---
 
@@ -357,8 +366,8 @@ API_BASE_URL=http://localhost:8000
 | :---: | :--- | :--- | :---: | :--- |
 | **01** | Stage A | **Project Setup & Monorepo Foundation** | **Audited** | Monorepo layout, Next.js web build (passed), Flutter starter (ready), FastAPI (`/health`, `/ready` passed), Supabase PostgreSQL + PostGIS verified, Alembic loader verified, CI workflow (4 jobs). Docker & Flutter CLI blocked on host tooling. Conditionally ready for Phase 2. |
 | **02** | Stage A | **Auth and Tenants** | **Complete** | Tenant registration, Argon2id, JWT access & refresh tokens with rotation and reuse detection, RBAC permissions (5 roles), transaction-scoped `app.tenant_id`, RLS migration `4f61a7dd311e` executed on Supabase, 34 automated unit/API tests passing, live PostgreSQL RLS isolation verified 100%. |
-| **03** | Stage A | **Platform Basics** | **Not Started** | Audit logging service, tenant settings, UTC helpers, feature flags, Redis rate limiter middleware. |
-| **04** | Stage B | **Employees & Workplaces** | **Not Started** | Employee CRUD, departments, PostGIS locations (`ST_DWithin`), CSV import Celery worker, invite flow. |
+| **03** | Stage A | **Organization Structure & Employee Management** | **Complete** | Departments, Designations, Employee profiles & lifecycle (CRUD, search, filtering, pagination), RBAC matrix, `GET /employees/me` self-access, directory denial for employee role, synchronized user deactivation & session revocation, composite tenant foreign keys, typed API client, Next.js `/organization` dashboard, Phase 3.3 secure HttpOnly cookie migration (zero localStorage tokens, memory access tokens, in-flight promise lock), 65 backend tests, 19 web tests passing. Migration `e6331816d336` applied and verified live on Supabase. |
+| **04** | Stage B | **Employees & Workplaces** | **Planned** | Comprehensive implementation plan prepared in `docs/PHASE_04_PLAN.md` covering PostGIS workplace locations (`ST_DWithin`), geofences, bulk CSV/XLSX employee import Celery worker, invite flow. Awaiting owner approval. |
 | **05** | Stage B | **Shifts and Punch Engine** | **Not Started** | Shift templates, append-only `attendance_events`, pure calculation engine deriving `attendance_days`, idempotency. |
 | **06** | Stage B | **Mobile Check-in (Flutter)** | **Not Started** | Flutter mobile app, geofence verification, offline queue, randomized jitter retry, status screen. |
 | **07** | Stage B | **Fraud Shield v1** | **Not Started** | Device binding, check-in selfie capture, mock GPS detection, clock drift check, risk score calculation. |
@@ -381,6 +390,127 @@ API_BASE_URL=http://localhost:8000
 ---
 
 ## 11. Change History
+
+### [2026-11-01] — Phase 3.3: Secure Refresh Token Migration to HttpOnly Cookies
+- **Phase**: Phase 3.3 (Security Hardening — HttpOnly Cookie Migration)
+- **Summary**:
+  - Removed all token persistence from browser `localStorage`. Replaced with `tokenStorage.clearLegacyTokens()` to purge historical keys.
+  - Migrated refresh token transport exclusively to HttpOnly cookies scoped to `Path=/api/v1/auth` with `SameSite=lax`.
+  - Configured dynamic cookie `Secure` flag: enforced `True` in production, controlled by `settings.COOKIE_SECURE` in development for HTTP `localhost` compatibility.
+  - Retained access tokens strictly in React memory (`useState` + `useRef` in `AuthContext`), preventing script access to persistent tokens.
+  - Enabled automatic session rehydration on page reload via `POST /api/v1/auth/refresh` sending an empty JSON body `{}` with the browser-managed HttpOnly cookie.
+  - Implemented transparent 401 interception in `apiFetch` via `setTokenRefreshHandler`: seamlessly refreshes expired access tokens and replays requests without user interruption.
+  - Prevented token race conditions and premature reuse detection triggering via an in-flight promise lock (`activeRefreshPromise`).
+  - Preserved logout and session revocation behavior: `POST /api/v1/auth/logout` revokes the refresh token family in the database and dispatches `Set-Cookie` with `Max-Age=0` and matching path/attributes to wipe the cookie.
+  - Updated CORS configuration in `services/api/config.py` to support `http://127.0.0.1:3000` alongside `localhost` with `allow_credentials=True`.
+  - Executed 10/10 live API tests against FastAPI + Supabase PostgreSQL; 19 frontend unit tests; 65 backend tests; verified clean database row counts and Alembic head.
+- **Affected Files**:
+  - `services/api/auth/routes.py`
+  - `services/api/config.py`
+  - `apps/web/src/lib/api.ts`
+  - `apps/web/src/lib/auth-context.tsx`
+  - `apps/web/src/lib/api.test.ts`
+  - `docs/PHASE_03.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-01] — Phase 3.1: Complete Frontend API Integration
+- **Phase**: Phase 3.1 (Organization Frontend API Integration)
+- **Summary**:
+  - Connected the Next.js Organization workspace (`/organization`) to the live FastAPI backend with zero mock data.
+  - Implemented multi-tenant session management (`AuthProvider`, `useAuth`) supporting token storage, refresh rotation, and inline authentication with tenant slug.
+  - Connected full CRUD operations for Departments (list, create, edit, activate/deactivate, manager appointment).
+  - Connected full CRUD operations for Designations (list, create, edit, activate/deactivate).
+  - Connected Employee Directory with real backend search, multi-field filtering, pagination, creation, editing, and dedicated status patching.
+  - Implemented robust error handling unpacking Pydantic validation errors, unauthorized (401), and forbidden (403) states.
+  - Enforced employee self-access security (`VIEW_OWN_PROFILE`): employee-role users are denied access to the full employee directory and automatically routed to their own personal profile via `GET /employees/me`.
+  - Added 15 frontend automated tests in `apps/web/src/lib/api.test.ts` (`make web-test`); verified Next.js ESLint (`make web-lint`), Next.js production build (`make web-build`), backend tests (`make test`, 65 passed), and backend lint (`make lint`).
+  - Executed end-to-end live HTTP tests against running FastAPI and Supabase database with 100% pass and verified teardown.
+- **Affected Files**:
+  - `apps/web/src/lib/api.ts`
+  - `apps/web/src/lib/auth-context.tsx`
+  - `apps/web/src/lib/providers.tsx`
+  - `apps/web/src/lib/api.test.ts`
+  - `apps/web/src/app/organization/page.tsx`
+  - `apps/web/src/app/layout.tsx`
+  - `apps/web/src/app/globals.css`
+  - `apps/web/package.json`
+  - `Makefile`
+  - `docs/PHASE_03.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-01] — Phase 3: Live Supabase Database Migration & Verification
+- **Phase**: Phase 3 (Organization Structure & Employee Management)
+- **Summary**:
+  - Successfully executed approved live migration `e6331816d336_phase_03_org_structure_and_employees.py` against live Supabase PostgreSQL.
+  - Verified live schema: tables `departments`, `designations`, and `employees` created with composite unique constraints and composite tenant foreign keys.
+  - Confirmed `RLS_ENABLED=True` and `FORCE_RLS=True` active on all 3 tables with parametric isolation policies.
+  - Verified same-tenant relationships, circular department manager FK, nullable relationships, and cross-tenant FK blocking (`IntegrityError`) directly against Supabase.
+  - Verified Phase 2 and Phase 3 HTTP API regression journeys with 100% pass rate.
+  - Cleaned up all synthetic verification data cleanly; confirmed pre-migration row counts (`tenants`: 2, `users`: 2, `refresh_tokens`: 4) 100% preserved.
+- **Affected Files**:
+  - `database/migrations/versions/e6331816d336_phase_03_org_structure_and_employees.py`
+  - `docs/PHASE_03.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-10-31] — Phase 3: Audit Findings Remediation
+- **Phase**: Phase 3 (Organization Structure & Employee Management)
+- **Summary**:
+  - Remediated employee self-access: Introduced `VIEW_OWN_PROFILE`, removed `VIEW_EMPLOYEES` from default `employee` role, implemented `GET /api/v1/employees/me` returning authenticated worker profile only, blocked employee URL ID manipulation (`/employees/{id}` returns 403 Forbidden).
+  - Remediated employee deactivation & account access: Synchronized deactivation in `update_employee_status` to set linked `users.status = 'inactive'` and revoke all active refresh tokens in `refresh_tokens` transactionally. Subsequent login and token refresh attempts return HTTP 401. Reactivation restores `users.status = 'active'`.
+  - Implemented composite tenant-aware foreign keys: Added `(tenant_id, id)` composite foreign keys and unique constraints across `departments.manager_id`, `employees.department_id`, `employees.designation_id`, `employees.reporting_manager_id`, and `employees.user_id`. Added `uq_employees_tenant_user_id` constraint. Verified offline migration SQL via Alembic.
+  - Implemented frontend API client foundation in `apps/web/src/lib/api.ts` with centralized URL config (`NEXT_PUBLIC_API_URL`), bearer authorization, strongly-typed DTOs, and error handling.
+  - Expanded automated test suite from 57 to 62 tests; all passing. Ruff, Mypy, Next.js lint, and Next.js production build clean.
+- **Affected Files**:
+  - `services/api/auth/permissions.py`
+  - `services/api/auth/models.py`
+  - `services/api/employees/models.py`
+  - `services/api/employees/service.py`
+  - `services/api/employees/routes.py`
+  - `services/api/organization/models.py`
+  - `database/migrations/versions/e6331816d336_phase_03_org_structure_and_employees.py`
+  - `apps/web/src/lib/api.ts`
+  - `tests/test_phase3_rbac.py`
+  - `tests/test_phase3_api.py`
+  - `tests/test_phase3_business_rules.py`
+  - `docs/PHASE_03.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-10-30] — Phase 3: Organization Structure & Employee Management
+- **Phase**: Phase 3 (Organization Structure & Employee Management)
+- **Summary**:
+  - Implemented multi-tenant domain models for `Department`, `Designation`, and `Employee` with tenant scoping, unique codes/names, and foreign key relations.
+  - Implemented Department and Designation management with activation/deactivation toggles and department manager references.
+  - Implemented comprehensive Employee profiles (`employee_id`, `first_name`, `last_name`, `work_email`, `phone_number`, `department_id`, `designation_id`, `reporting_manager_id`, `employment_type`, `joining_date`, `status`, `work_location`).
+  - Implemented Employee lifecycle management: creation, retrieval, updates, status transitions (`active`, `inactive`, `on_leave`, `terminated`), and soft deactivation.
+  - Implemented employee search across name, ID, and email with multi-criteria filtering and pagination.
+  - Expanded RBAC system with 6 new permissions (`manage_organization`, `view_organization`, `create_employees`, `view_employees`, `update_employees`, `deactivate_employees`) across 5 roles (`owner`, `admin`, `hr`, `manager`, `employee`).
+  - Created Alembic migration `e6331816d336_phase_03_org_structure_and_employees.py` including DDL for `departments`, `designations`, `employees`, table-level RLS policies, and grants to `authenticated, service_role`.
+  - Offline-validated migration SQL via `alembic upgrade head --sql`.
+  - Implemented modern Next.js 14+ UI under `/organization` with Overview statistics, searchable and filterable Employee Directory, Department Management, Designation Management, and modal dialogs.
+  - Added 18 new automated tests (52 total) covering schemas, RBAC permissions, and API endpoints; Ruff clean; Mypy clean; Next.js production build clean.
+  - Reconciled Phase 3 scope differences with roadmap documentation in `docs/PHASE_03.md`.
+- **Affected Files**:
+  - `services/api/auth/permissions.py`
+  - `services/api/organization/__init__.py`
+  - `services/api/organization/models.py`
+  - `services/api/organization/schemas.py`
+  - `services/api/organization/service.py`
+  - `services/api/organization/routes.py`
+  - `services/api/employees/__init__.py`
+  - `services/api/employees/models.py`
+  - `services/api/employees/schemas.py`
+  - `services/api/employees/service.py`
+  - `services/api/employees/routes.py`
+  - `services/api/main.py`
+  - `database/migrations/env.py`
+  - `database/migrations/versions/e6331816d336_phase_03_org_structure_and_employees.py`
+  - `tests/test_phase3_schemas.py`
+  - `tests/test_phase3_rbac.py`
+  - `tests/test_phase3_api.py`
+  - `apps/web/src/app/organization/page.tsx`
+  - `apps/web/src/app/globals.css`
+  - `docs/PHASE_03.md`
+  - `PROJECT_CONTEXT.md`
 
 ### [2026-10-30] — Phase 2: Authentication & Multi-Tenant Foundation
 - **Phase**: Phase 2 (Auth and Tenants)
@@ -420,6 +550,49 @@ API_BASE_URL=http://localhost:8000
   - `tests/test_cross_tenant_isolation.py`
   - `.env.example`
   - `docs/PHASE_02.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-01] — Phase 3.2: Final Security, UX and Production Readiness Audit
+- **Phase**: Phase 3 (Organization Structure & Employee Management)
+- **Summary**:
+  - Conducted focused final audit across authentication/token security, API scalability, frontend UX behavior, and cross-tenant regressions.
+  - Identified and remediated a critical frontend race condition in `apps/web/src/lib/auth-context.tsx` where concurrent 401s could dispatch simultaneous refresh requests with the same token, tripping backend token reuse detection. Added `activeRefreshPromise` deduplication lock.
+  - Inspected backend HttpOnly cookie architecture: confirmed FastAPI backend already issues HttpOnly cookies on `/auth/login` and `/auth/refresh` and supports cookie-based refresh. Outlined safe non-breaking roadmap for eliminating `localStorage` fallback.
+  - Evaluated API scalability: verified backend-driven employee pagination, identified frontend limitation for enterprise tenants with >100 departments/designations lacking UI pagination controls.
+  - Reported explicit browser automation status: automated Playwright testing was not performed due to sandbox offline driver download restriction; documented full limitation report in scratchpad.
+  - Executed automated live security verification against running FastAPI + Supabase: confirmed employee users receive HTTP 403 on directory and organization creation endpoints, employee self-access `/employees/me` works, cross-tenant isolation is intact, token rotation & reuse detection function, and pre-migration database counts remain pristine (`e6331816d336`).
+- **Affected Files**:
+  - `apps/web/src/lib/auth-context.tsx` (Fixed concurrent refresh race condition)
+  - `docs/PHASE_03.md` (Added Section 13 Final Security, UX & Readiness Audit)
+  - `PROJECT_CONTEXT.md` (Updated status, change log, and next actions)
+
+### [2026-10-31] — Phase 3.1: Complete Frontend API Integration
+- **Phase**: Phase 3 (Organization Structure & Employee Management)
+- **Summary**:
+  - Integrated Next.js administrative organization workspace (`apps/web/src/app/organization/page.tsx`) with live FastAPI backend and live Supabase PostgreSQL database.
+  - Removed all mock/sample data from production organization screens.
+  - Implemented centralized `AuthProvider` (`apps/web/src/lib/auth-context.tsx`) with multi-tenant workspace login, persistent session recovery, and refresh token rotation.
+  - Connected department CRUD, designation CRUD, employee directory with backend pagination, status toggles, and employee self-service view (`/employees/me`).
+  - Added 15 frontend unit/integration tests (`apps/web/src/lib/api.test.ts`), passing with clean ESLint and Next.js 14 production build.
+- **Affected Files**:
+  - `apps/web/src/lib/api.ts`
+  - `apps/web/src/lib/api.test.ts`
+  - `apps/web/src/lib/auth-context.tsx`
+  - `apps/web/src/lib/providers.tsx`
+  - `apps/web/src/app/layout.tsx`
+  - `apps/web/src/app/organization/page.tsx`
+  - `docs/PHASE_03.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-10-31] — Phase 3: Approved Live Supabase PostgreSQL Migration
+- **Phase**: Phase 3 (Organization Structure & Employee Management)
+- **Summary**:
+  - Applied migration `e6331816d336_phase_03_org_structure_and_employees` to live Supabase PostgreSQL.
+  - Created `departments`, `designations`, and `employees` tables with 5 composite tenant foreign keys, composite unique constraints, and forced PostgreSQL Row-Level Security (`FORCE ROW LEVEL SECURITY`).
+  - Verified live database state with zero loss or tampering of Phase 2 baseline records.
+- **Affected Files**:
+  - `database/migrations/versions/e6331816d336_phase_03_org_structure_and_employees.py`
+  - `docs/PHASE_03.md`
   - `PROJECT_CONTEXT.md`
 
 ### [2026-10-30] — Phase 1 Final Verification & Acceptance Audit
@@ -477,7 +650,12 @@ API_BASE_URL=http://localhost:8000
 
 ## 12. Next Actions
 
-1. **Immediate Task**: Present Phase 1 Final Audit Report to project owner and obtain sign-off for Phase 2.
-2. **Transition to Phase 2 (Upon Approval)**:
-   - Begin **Phase 2 — Auth and Tenants** on branch `phase-02`.
-   - Core deliverables: Tenant registration, user login, Argon2id password hashing, JWT token lifecycle (access + rotating refresh tokens), role-based access control (owner, admin, hr, manager, employee), per-request `SET LOCAL app.tenant_id = :tenant_id` middleware, and automated cross-tenant isolation test suite.
+1. **Immediate Task**: Await project owner review and approval of the Phase 4 Implementation Plan Revision 2.0 ([docs/PHASE_04_PLAN.md](file:///Users/apple/Upostit/docs/PHASE_04_PLAN.md)).
+2. **Phase 4 Execution (Pending Owner Approval)**:
+   - Do NOT start implementation code or schema changes until owner approval is received.
+   - Upon approval, create branch `phase-04` and execute the 5 core workstreams:
+     - Workstream 1: Database models & Alembic migration for `locations`, `employee_locations`, `import_jobs`, and `employee_invitations` with forced RLS.
+     - Workstream 2: Location management API & spatial geofencing verification (`ST_DWithin`).
+     - Workstream 3: Employee workplace assignments and self-access endpoints.
+     - Workstream 4: Asynchronous Celery CSV/Excel batch import pipeline with line-by-line error reporting.
+     - Workstream 5: Employee invitation lifecycle, activation codes, and web UI screens.
