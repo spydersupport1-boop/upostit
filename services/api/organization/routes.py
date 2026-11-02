@@ -44,6 +44,7 @@ designations_router = APIRouter(prefix="/designations", tags=["Designations"])
 # Department Endpoints
 # ==============================================================================
 
+
 @departments_router.post(
     "",
     response_model=DepartmentResponse,
@@ -69,7 +70,9 @@ async def create_department_endpoint(
 async def list_departments_endpoint(
     context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
     session: Annotated[AsyncSession, Depends(get_db)],
-    is_active: Annotated[bool | None, Query(description="Filter active or inactive departments")] = None,
+    is_active: Annotated[
+        bool | None, Query(description="Filter active or inactive departments")
+    ] = None,
     search: Annotated[str | None, Query(description="Search by name or code")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -133,6 +136,7 @@ async def deactivate_department_endpoint(
 # Designation Endpoints
 # ==============================================================================
 
+
 @designations_router.post(
     "",
     response_model=DesignationResponse,
@@ -158,7 +162,9 @@ async def create_designation_endpoint(
 async def list_designations_endpoint(
     context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
     session: Annotated[AsyncSession, Depends(get_db)],
-    is_active: Annotated[bool | None, Query(description="Filter active or inactive designations")] = None,
+    is_active: Annotated[
+        bool | None, Query(description="Filter active or inactive designations")
+    ] = None,
     search: Annotated[str | None, Query(description="Search by title or code")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,

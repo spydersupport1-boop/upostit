@@ -142,7 +142,10 @@ async def test_cannot_assign_inactive_manager():
         await create_employee(session, tenant_id, req)
 
     assert exc_info.value.status_code == 400
-    assert "Cannot assign an inactive or terminated employee as reporting manager" in exc_info.value.detail
+    assert (
+        "Cannot assign an inactive or terminated employee as reporting manager"
+        in exc_info.value.detail
+    )
 
 
 @pytest.mark.asyncio
@@ -221,7 +224,10 @@ async def test_invalid_status_transition_rejected():
         await update_employee_status(session, tenant_id, emp_id, "on_leave")
 
     assert exc_info.value.status_code == 400
-    assert "Invalid employee status transition from 'terminated' to 'on_leave'" in exc_info.value.detail
+    assert (
+        "Invalid employee status transition from 'terminated' to 'on_leave'"
+        in exc_info.value.detail
+    )
 
 
 @pytest.mark.asyncio
@@ -591,4 +597,3 @@ async def test_reactivated_employee_can_authenticate():
 
     assert token_res.access_token is not None
     assert returned_user.status == "active"
-

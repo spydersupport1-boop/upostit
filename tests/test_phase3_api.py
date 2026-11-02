@@ -76,34 +76,48 @@ async def test_employee_role_forbidden_from_modifications():
             headers = {"Authorization": "Bearer mocked-valid-token"}
 
             # Cannot create department
-            res1 = await client.post("/api/v1/departments", headers=headers, json={"name": "Eng", "code": "ENG"})
+            res1 = await client.post(
+                "/api/v1/departments", headers=headers, json={"name": "Eng", "code": "ENG"}
+            )
             assert res1.status_code == 403
             assert "permission denied" in res1.json()["detail"].lower()
 
             # Cannot create designation
-            res2 = await client.post("/api/v1/designations", headers=headers, json={"title": "Dev", "code": "DEV"})
+            res2 = await client.post(
+                "/api/v1/designations", headers=headers, json={"title": "Dev", "code": "DEV"}
+            )
             assert res2.status_code == 403
             assert "permission denied" in res2.json()["detail"].lower()
 
             # Cannot create employee
-            res3 = await client.post("/api/v1/employees", headers=headers, json={
-                "employee_id": "EMP-001",
-                "first_name": "Test",
-                "last_name": "User",
-                "work_email": "test@corp.com",
-                "joining_date": "2026-01-01",
-            })
+            res3 = await client.post(
+                "/api/v1/employees",
+                headers=headers,
+                json={
+                    "employee_id": "EMP-001",
+                    "first_name": "Test",
+                    "last_name": "User",
+                    "work_email": "test@corp.com",
+                    "joining_date": "2026-01-01",
+                },
+            )
             assert res3.status_code == 403
             assert "permission denied" in res3.json()["detail"].lower()
 
             # Cannot update employee
             random_id = uuid.uuid4()
-            res4 = await client.put(f"/api/v1/employees/{random_id}", headers=headers, json={"first_name": "Changed"})
+            res4 = await client.put(
+                f"/api/v1/employees/{random_id}", headers=headers, json={"first_name": "Changed"}
+            )
             assert res4.status_code == 403
             assert "permission denied" in res4.json()["detail"].lower()
 
             # Cannot change employee status
-            res5 = await client.patch(f"/api/v1/employees/{random_id}/status", headers=headers, json={"status": "terminated"})
+            res5 = await client.patch(
+                f"/api/v1/employees/{random_id}/status",
+                headers=headers,
+                json={"status": "terminated"},
+            )
             assert res5.status_code == 403
             assert "permission denied" in res5.json()["detail"].lower()
 
@@ -198,17 +212,23 @@ async def test_hr_role_forbidden_from_managing_organization():
             headers = {"Authorization": "Bearer mocked-valid-token"}
 
             # HR cannot create department
-            res1 = await client.post("/api/v1/departments", headers=headers, json={"name": "Finance", "code": "FIN"})
+            res1 = await client.post(
+                "/api/v1/departments", headers=headers, json={"name": "Finance", "code": "FIN"}
+            )
             assert res1.status_code == 403
             assert "permission denied" in res1.json()["detail"].lower()
 
             # HR cannot create designation
-            res2 = await client.post("/api/v1/designations", headers=headers, json={"title": "Accountant", "code": "ACC"})
+            res2 = await client.post(
+                "/api/v1/designations", headers=headers, json={"title": "Accountant", "code": "ACC"}
+            )
             assert res2.status_code == 403
             assert "permission denied" in res2.json()["detail"].lower()
 
             # HR cannot update department
-            res3 = await client.put(f"/api/v1/departments/{uuid.uuid4()}", headers=headers, json={"name": "New Name"})
+            res3 = await client.put(
+                f"/api/v1/departments/{uuid.uuid4()}", headers=headers, json={"name": "New Name"}
+            )
             assert res3.status_code == 403
     finally:
         app.dependency_overrides.clear()
@@ -224,18 +244,26 @@ async def test_manager_role_forbidden_from_modifications():
             headers = {"Authorization": "Bearer mocked-valid-token"}
 
             # Manager cannot create employee
-            res1 = await client.post("/api/v1/employees", headers=headers, json={
-                "employee_id": "EMP-999",
-                "first_name": "New",
-                "last_name": "Hire",
-                "work_email": "hire@corp.com",
-                "joining_date": "2026-01-01",
-            })
+            res1 = await client.post(
+                "/api/v1/employees",
+                headers=headers,
+                json={
+                    "employee_id": "EMP-999",
+                    "first_name": "New",
+                    "last_name": "Hire",
+                    "work_email": "hire@corp.com",
+                    "joining_date": "2026-01-01",
+                },
+            )
             assert res1.status_code == 403
             assert "permission denied" in res1.json()["detail"].lower()
 
             # Manager cannot change employee status
-            res2 = await client.patch(f"/api/v1/employees/{uuid.uuid4()}/status", headers=headers, json={"status": "inactive"})
+            res2 = await client.patch(
+                f"/api/v1/employees/{uuid.uuid4()}/status",
+                headers=headers,
+                json={"status": "inactive"},
+            )
             assert res2.status_code == 403
     finally:
         app.dependency_overrides.clear()
@@ -255,13 +283,17 @@ async def test_payload_validation_errors():
             assert res1.status_code in (422, 400)
 
             # Invalid email in employee create
-            res2 = await client.post("/api/v1/employees", headers=headers, json={
-                "employee_id": "EMP-001",
-                "first_name": "First",
-                "last_name": "Last",
-                "work_email": "not-valid",
-                "joining_date": "invalid-date",
-            })
+            res2 = await client.post(
+                "/api/v1/employees",
+                headers=headers,
+                json={
+                    "employee_id": "EMP-001",
+                    "first_name": "First",
+                    "last_name": "Last",
+                    "work_email": "not-valid",
+                    "joining_date": "invalid-date",
+                },
+            )
             assert res2.status_code in (422, 400)
     finally:
         app.dependency_overrides.clear()

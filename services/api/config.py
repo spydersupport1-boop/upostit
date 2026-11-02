@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     STORAGE_SECRET_KEY: str = Field(default="placeholder_secret_key")
     STORAGE_BUCKET: str = Field(default="attendance-assets")
     STORAGE_USE_SSL: bool = Field(default=False)
+    STORAGE_ALLOW_MEMORY_FALLBACK: bool = Field(
+        default=True,
+        description="Allow in-memory object fallback only in development/test environments.",
+    )
 
     # Authentication & Security (Phase 2)
     JWT_SECRET_KEY: str = Field(default="")
@@ -67,6 +71,20 @@ class Settings(BaseSettings):
     # Database Security & RLS Execution (Phase 2)
     MIGRATION_DATABASE_URL: str = Field(default="")
     RUNTIME_DATABASE_ROLE: str = Field(default="authenticated")
+
+    # Frontend Web App URL
+    FRONTEND_URL: str = Field(default="http://localhost:3000")
+
+    # Employee Invitations & Account Activation (Phase 4 Milestone 4)
+    INVITATION_TOKEN_EXPIRE_HOURS: int = Field(default=168)  # 7 days
+    EMAIL_BACKEND: str = Field(default="console")  # console, smtp, memory
+    SMTP_HOST: str = Field(default="")
+    SMTP_PORT: int = Field(default=587)
+    SMTP_USER: str = Field(default="")
+    SMTP_PASSWORD: str = Field(default="")
+    SMTP_USE_TLS: bool = Field(default=True)
+    EMAIL_FROM_ADDRESS: str = Field(default="noreply@attendance.io")
+    EMAIL_FROM_NAME: str = Field(default="Attendance SaaS")
 
     @property
     def effective_jwt_secret(self) -> str:

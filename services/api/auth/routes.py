@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, Request, Response, status
+from fastapi import APIRouter, Cookie, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.auth.dependencies import (
@@ -35,6 +35,17 @@ from services.api.auth.service import (
 )
 from services.api.config import settings
 from services.api.database import get_db
+from services.api.employees.invitation_schemas import (
+    ActivateAccountRequest,
+    ActivateAccountResponse,
+    ValidateInvitationResponse,
+)
+from services.api.employees.invitation_service import (
+    activate_account as service_activate_account,
+)
+from services.api.employees.invitation_service import (
+    validate_public_invitation_token,
+)
 from services.api.tenants.schemas import TenantResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -169,3 +180,30 @@ async def logout_all(
         "message": "All refresh sessions have been revoked",
         "revoked_count": count,
     }
+
+
+@router.get(
+    "/invitations/validate",
+    response_model=ValidateInvitationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Public endpoint: Validate employee invitation token",
+)
+async def validate_invitation_endpoint(
+    token: Annotated[str, Query(description="URL-safe activation token")],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> ValidateInvitationResponse:
+    return await validate_public_invitation_token(session=session, raw_token=token)
+
+
+@router.post(
+    "/invitations/activate",
+    response_model=ActivateAccountResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Public endpoint: Activate account and set password",
+)
+async def activate_account_endpoint(
+    req: ActivateAccountRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> ActivateAccountResponse:
+    return await service_activate_account(session=session, req=req)
+

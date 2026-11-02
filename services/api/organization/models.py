@@ -31,7 +31,9 @@ class Department(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     manager_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("employees.id", ondelete="SET NULL", use_alter=True, name="fk_departments_manager_id"),
+        ForeignKey(
+            "employees.id", ondelete="SET NULL", use_alter=True, name="fk_departments_manager_id"
+        ),
         nullable=True,
         index=True,
     )
@@ -57,7 +59,9 @@ class Department(Base):
 
     # Relationships
     tenant = relationship("Tenant")
-    employees = relationship("Employee", back_populates="department", foreign_keys="Employee.department_id")
+    employees = relationship(
+        "Employee", back_populates="department", foreign_keys="Employee.department_id"
+    )
 
 
 class Designation(Base):

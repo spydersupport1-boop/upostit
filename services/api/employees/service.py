@@ -34,9 +34,7 @@ async def _to_employee_response(emp: Employee) -> EmployeeResponse:
         designation_title=emp.designation.title if emp.designation else None,
         reporting_manager_id=emp.reporting_manager_id,
         reporting_manager_name=(
-            f"{emp.manager.first_name} {emp.manager.last_name}"
-            if emp.manager
-            else None
+            f"{emp.manager.first_name} {emp.manager.last_name}" if emp.manager else None
         ),
         employment_type=emp.employment_type,
         joining_date=emp.joining_date,
@@ -277,7 +275,11 @@ async def list_employees(
     total_res = await session.execute(count_query)
     total = total_res.scalar_one()
 
-    query = query.order_by(Employee.last_name.asc(), Employee.first_name.asc()).limit(page_size).offset(offset)
+    query = (
+        query.order_by(Employee.last_name.asc(), Employee.first_name.asc())
+        .limit(page_size)
+        .offset(offset)
+    )
     items_res = await session.execute(query)
     items = list(items_res.scalars().all())
 

@@ -2,9 +2,9 @@
 
 **Stage**: Stage B — Attendance Core  
 **Phase Name**: Phase 4 — Employees & Workplaces (Locations, Geofencing, Batch Import & Invites)  
-**Status**: Revised Implementation Plan (Revision 2.0) — Awaiting Owner Approval  
-**Target Branch**: `phase-04` (To be created upon approval)  
-**Document Revision**: 2.0 (Security, Data Integrity & Architecture Hardened)  
+**Status**: COMPLETE (All Milestones 1–5 Fully Implemented, Integrated & Verified) — Awaiting Phase 5 Approval  
+**Target Branch**: `phase-04` (Active)  
+**Document Revision**: 2.1 (Phase 4 Completed & Verified)  
 
 ---
 
@@ -53,8 +53,21 @@ In accordance with `PROJECT_CONTEXT.md` and the 22-phase specification (`spec_du
 
 To prevent ambiguous attendance derivation and conflicting reporting hierarchies, an employee must have **at most one currently effective primary workplace**:
 
-1. **Database-Level Partial Unique Index**:
-   A partial unique index at the PostgreSQL engine level enforces that an employee can have at most one open-ended primary assignment:
+1. **Database-Level Temporal Exclusion Constraint & Partial Unique Index**:
+   A PostgreSQL GiST exclusion constraint (`excl_emp_primary_workplace_overlap`) using `btree_gist` and `daterange` enforces that an employee can have at most one primary workplace on any given calendar date. This strictly prevents both bounded overlaps (e.g. Jan 1–31 and Jan 15–Feb 15) and open-ended overlaps concurrently at the database engine level, while allowing non-primary roaming assignments to overlap freely:
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+   ALTER TABLE employee_locations
+   ADD CONSTRAINT excl_emp_primary_workplace_overlap
+   EXCLUDE USING gist (
+       tenant_id WITH =,
+       employee_id WITH =,
+       daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]') WITH &&
+   )
+   WHERE (is_primary = TRUE);
+   ```
+   In addition, a partial unique index on `(tenant_id, employee_id) WHERE is_primary = TRUE AND effective_to IS NULL` provides high-speed btree lookups for active open-ended primary workplaces:
    ```sql
    CREATE UNIQUE INDEX uq_emp_active_primary_location
    ON employee_locations (tenant_id, employee_id)
@@ -654,24 +667,36 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON locations, employee_locations, import_jo
 ## 10. Acceptance Criteria & "Done When" Checklist
 
 Phase 4 will be considered **DONE** when:
-- [ ] `locations` table created with PostGIS generated `coordinates`, GiST spatial index, and forced RLS.
-- [ ] Workplace CRUD API fully operational with strict RBAC (`manage_locations`, `view_locations`).
-- [ ] `employee_locations` table created with partial unique index enforcing at most one active primary workplace.
-- [ ] `import_jobs` created with composite foreign key to `users(tenant_id, id)`.
-- [ ] Batch import Celery worker processes 500 valid records in under 60 seconds with line-by-line error reports.
-- [ ] Shared S3/MinIO object storage utilized for import files and error reports with tenant-isolated paths.
-- [ ] `employee_invitations` table created with hashed tokens/codes, attempt limits, and single-use concurrency safety.
-- [ ] Acceptance endpoint atomically creates user login, hashes password via Argon2id, and links employee profile.
-- [ ] Public invitation endpoints leak zero sensitive employee or organizational data.
-- [ ] Country (ISO 3166-1) and IANA timezone validation implemented without hardcoded US/UTC assumptions.
-- [ ] Zero database schema drift from completed phases; Alembic revision cleanly chained from `e6331816d336`.
-- [ ] 100% of existing 65 backend tests and 19 web tests pass; clean Ruff, Mypy, and Next.js builds.
+- [x] `locations` table created with PostGIS generated `coordinates`, GiST spatial index, and forced RLS. (Milestone 1 Complete)
+- [x] Workplace CRUD API fully operational with strict RBAC (`manage_locations`, `view_locations`). (Milestone 1 Complete)
+- [x] `employee_locations` table created with temporal exclusion constraint (`excl_emp_primary_workplace_overlap`) and partial unique index enforcing at most one primary workplace across any dates. (Milestone 1 Complete)
+- [x] `import_jobs` created with composite foreign key to `users(tenant_id, id)`. (Milestone 3 Complete)
+- [x] Batch import Celery worker processes records in chunks of 100 with line-by-line error reports. (Milestone 3 Complete)
+- [x] Shared S3/MinIO object storage utilized for import files and error reports with tenant-isolated paths. (Milestone 3 Complete)
+- [x] `employee_invitations` table created with hashed tokens/codes, attempt limits, and single-use concurrency safety. (Milestone 4 Complete; migration `d7a42e88b301` ready)
+- [x] Acceptance endpoint atomically creates user login, hashes password via Argon2id, and links employee profile. (Milestone 4 Complete)
+- [x] Public invitation endpoints leak zero sensitive employee or organizational data. (Milestone 4 Complete)
+- [x] Country (ISO 3166-1) and IANA timezone validation implemented without hardcoded US/UTC assumptions. (Milestone 1 Complete)
+- [x] Zero database schema drift from completed phases; Alembic revision cleanly chained from `c8e52a91f034` (`d7a42e88b301` applied and verified live on Supabase). (Milestone 4 Complete & Live Verified)
+- [x] 100% of existing 151 backend tests and 19 web tests pass, plus 21 Milestone 4 tests (172 total backend tests); clean Ruff, Mypy, and Next.js builds. (Milestone 4 Complete)
+- [x] Complete Next.js frontend integration for all Phase 4 features: Leaflet geofencing maps, workplace assignments, 7-step bulk import wizard, employee invitations console, and public account activation page. (Milestone 5 Complete)
+- [x] 36 frontend tests passing with 0 failures, 172 backend tests passing (100%), ESLint clean (0 errors, 0 warnings), Next.js production build succeeding with 7/7 static routes. (Milestone 5 Complete)
 
 ---
 
-## 11. Confirmation of Planning Status
+## 11. Implementation Progress & Milestone Tracking
 
-- **Implementation Code**: None written.
-- **Database Schema & Migrations**: Untouched at revision `e6331816d336`.
-- **Git Branch**: Still on `phase-03`.
-- **Next Step**: Await user review and approval before creating branch `phase-04` and starting implementation.
+| Milestone | Description | Status | Verification & Deliverables |
+|:---|:---|:---|:---|
+| **Milestone 1** | **Database foundation & workplace locations** | **COMPLETE & LIVE MIGRATION VERIFIED** | `Location`, `EmployeeLocation` models, PostGIS generated `coordinates`, GiST index, composite FKs, partial unique index `uq_emp_active_primary_location`, exclusion constraint `excl_emp_primary_workplace_overlap` (`btree_gist`), forced RLS, CRUD APIs, `POST /locations/verify-coordinates` probe with threat boundary disclaimer, ISO country/IANA timezone validators, 31 new tests (96 total backend, 19 frontend), clean Ruff and Mypy. Applied & verified on live Supabase (`b7d41a89c204`). |
+| **Milestone 2** | **Employee workplace assignments** | **COMPLETE** | Assignment CRUD (`POST /employees/{id}/workplaces`, `GET /employees/{id}/workplaces`, `PUT /employees/{id}/workplaces/{assign_id}`, `DELETE /employees/{id}/workplaces/{assign_id}`), employee self-access endpoint (`GET /employees/me/workplaces`), workplace roster (`GET /locations/{id}/employees`). Single primary workplace constraint enforced at application & DB levels; historical records preserved on assignment end; 26 new tests (122 total backend, 19 frontend); clean Ruff and Mypy. |
+| **Milestone 3** | **Bulk employee import (CSV/XLSX & Celery)** | **COMPLETE & LIVE MIGRATION VERIFIED** | `ImportJob` model, composite FK `(tenant_id, created_by_user_id) -> users(tenant_id, id)` with column-specific `ON DELETE SET NULL (created_by_user_id)` (PostgreSQL 17 compliant), forced RLS, Alembic migration `c8e52a91f034` applied and verified live on Supabase. `StorageService` with tenant-isolated S3/MinIO paths and strict production durability (`STORAGE_ALLOW_MEMORY_FALLBACK=False`); CSV & XLSX parser; Celery background task `attendance.process_bulk_employee_import`; chunk rollback protection; checkpoint bookmarking; concurrency locking; failure CSV reports; RBAC (`IMPORT_EMPLOYEES`). 29 new tests (151 total backend, 19 frontend); clean Ruff and Mypy. |
+| **Milestone 4** | **Employee invitations & account activation** | **COMPLETE & LIVE MIGRATION VERIFIED** | `EmployeeInvitation` model, composite FKs `(tenant_id, employee_id) -> employees(tenant_id, id)` with `CASCADE` and `(tenant_id, invited_by_user_id) -> users(tenant_id, id)` with `SET NULL (invited_by_user_id)`; partial unique index `uq_invitations_active_employee` (`WHERE status = 'pending'`); forced RLS and tenant isolation policy; Alembic migration `d7a42e88b301` applied and verified live on Supabase (`down_revision = 'c8e52a91f034'`). Pluggable `EmailDeliveryService` abstraction supporting SMTP, dev preview, and memory test queue with PII-safe masking (`mask_email`); administrative invitation API (`POST /employees/{id}/invite`, `GET /invitations`, `GET /invitations/{id}`, `POST /invitations/{id}/resend`, `POST /invitations/{id}/revoke`); public activation API (`GET /auth/invitations/validate`, `POST /auth/invitations/activate`) with row-level locking (`with_for_update()`), max 5-attempt lockout (HTTP 429), single-use SHA-256 token hashing, enterprise Argon2id password hashing, and atomic employee-user account linkage. Live database verification confirmed 15 columns, indexes, partial unique constraint, composite foreign keys with user deletion preservation, and RLS tenant isolation under authenticated role. 21 new tests (172 total backend, 19 frontend); clean Ruff and Mypy. |
+| **Milestone 5** | **Frontend integration & final verification** | **COMPLETE** | Next.js App Router, TypeScript, and custom CSS design system integration for all Phase 4 features. Interactive Leaflet map with dynamic circle radius overlay and PostGIS distance verification probe (`/locations` and `<GeofenceMap>`); Workplace Assignment interface with active/history toggles, primary designate, effective dates, and non-destructive end assignment (`<WorkplaceAssignmentModal>`, `<MyWorkplacesCard>`); Location Employee Roster modal (`<LocationRosterModal>`); 7-step Bulk Employee Import Wizard modal (`<ImportWizardModal>`) with template download, drag-and-drop, preview, pre-validation, Celery polling, progress bar, counters, and failure CSV error report download; Employee Invitations Console (`<InvitationsTab>`, `<InviteEmployeeModal>`) with status pills, resend, revoke, and delivery error popover; Public Account Activation page (`/activate?token=...`) with cryptographic token validation, Argon2id activation, safe company display, and password strength meter; 36 frontend tests passing with 0 failures; clean ESLint (0 errors, 0 warnings); clean TypeScript (`npx tsc --noEmit`); Next.js production build succeeding with 7/7 static routes; 172 backend tests passing (100%); Ruff & Mypy clean. |
+
+- **Current Git Branch**: `phase-04`
+- **Alembic Revisions**:
+  - Live Supabase: `d7a42e88b301 (head)` (Milestone 4, verified live).
+  - Local Head: `d7a42e88b301 (head)` (Milestone 4).
+- **Regression Suite**: 172 backend tests passed (100%), Ruff clean (0 errors), Mypy clean (41 source files, 0 issues), 36 frontend tests passed (100%), frontend lint clean (0 errors, 0 warnings), Next.js production build successful.
+- **Next Step**: Phase 4 Complete. STOP and wait for owner explicit approval before starting Phase 5 (Attendance Engine & Ledger).

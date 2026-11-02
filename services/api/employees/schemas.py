@@ -13,7 +13,9 @@ EmployeeStatus = Literal["active", "inactive", "on_leave", "terminated"]
 class EmployeeCreateRequest(BaseModel):
     """Payload to onboard a new employee."""
 
-    employee_id: str = Field(..., min_length=1, max_length=50, description="Company-specific employee ID (e.g. EMP-001)")
+    employee_id: str = Field(
+        ..., min_length=1, max_length=50, description="Company-specific employee ID (e.g. EMP-001)"
+    )
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     work_email: EmailStr

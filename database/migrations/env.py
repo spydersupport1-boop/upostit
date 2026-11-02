@@ -21,7 +21,8 @@ if config.config_file_name is not None:
 # Import all domain models so Alembic registers them on Base.metadata
 from services.api.auth.models import RefreshToken, User
 from services.api.database import Base
-from services.api.employees.models import Employee
+from services.api.employees.models import Employee, EmployeeInvitation, ImportJob
+from services.api.locations.models import EmployeeLocation, Location
 from services.api.organization.models import Department, Designation
 from services.api.tenants.models import Tenant
 

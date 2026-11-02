@@ -31,6 +31,7 @@ export interface RequestOptions extends RequestInit {
   token?: string | null;
   params?: Record<string, string | number | boolean | undefined | null>;
   _isRetry?: boolean;
+  responseType?: "json" | "blob";
 }
 
 type TokenRefreshHandler = () => Promise<string | null>;
@@ -47,7 +48,7 @@ export async function apiFetch<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { token, params, headers, credentials = "include", _isRetry = false, ...customConfig } = options;
+  const { token, params, headers, credentials = "include", _isRetry = false, responseType = "json", ...customConfig } = options;
 
   let url = `${API_BASE_URL}/api/v1${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
 
@@ -64,9 +65,14 @@ export async function apiFetch<T>(
     }
   }
 
-  const defaultHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const defaultHeaders: Record<string, string> = {};
+
+  // Do not set Content-Type if uploading FormData (browser sets boundary automatically)
+  if (typeof FormData !== "undefined" && customConfig.body instanceof FormData) {
+    // leave Content-Type unset
+  } else if (!headers || !("Content-Type" in (headers as Record<string, string>))) {
+    defaultHeaders["Content-Type"] = "application/json";
+  }
 
   if (token) {
     defaultHeaders["Authorization"] = `Bearer ${token}`;
@@ -126,6 +132,10 @@ export async function apiFetch<T>(
 
   if (response.status === 204) {
     return {} as T;
+  }
+
+  if (responseType === "blob") {
+    return (await response.blob()) as unknown as T;
   }
 
   return response.json();
@@ -468,3 +478,423 @@ export const organizationApi = {
       token,
     }),
 };
+
+// =============================================================================
+// Phase 4: Workplace Location DTOs & Endpoints
+// =============================================================================
+
+export interface LocationDto {
+  id: string;
+  tenant_id: string;
+  name: string;
+  code: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country_code: string;
+  postal_code?: string | null;
+  timezone: string;
+  latitude: number;
+  longitude: number;
+  geofence_radius_meters: number;
+  is_active: boolean;
+  wifi_ssid?: string | null;
+  wifi_bssid?: string | null;
+  ip_range?: string | null;
+  employee_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocationCreateDto {
+  name: string;
+  code: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country_code: string;
+  postal_code?: string | null;
+  timezone: string;
+  latitude: number;
+  longitude: number;
+  geofence_radius_meters?: number;
+  is_active?: boolean;
+  wifi_ssid?: string | null;
+  wifi_bssid?: string | null;
+  ip_range?: string | null;
+}
+
+export interface LocationUpdateDto {
+  name?: string;
+  code?: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country_code?: string;
+  postal_code?: string | null;
+  timezone?: string;
+  latitude?: number;
+  longitude?: number;
+  geofence_radius_meters?: number;
+  is_active?: boolean;
+  wifi_ssid?: string | null;
+  wifi_bssid?: string | null;
+  ip_range?: string | null;
+}
+
+export interface LocationListResponseDto {
+  items: LocationDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GeofenceVerifyRequestDto {
+  location_id: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface GeofenceVerifyResponseDto {
+  is_inside: boolean;
+  distance_meters: number;
+  threshold_meters: number;
+  details: Record<string, unknown>;
+}
+
+export interface LocationEmployeeDto {
+  assignment_id: string;
+  employee_id: string;
+  employee_number: string;
+  full_name: string;
+  email: string;
+  department_name?: string | null;
+  designation_title?: string | null;
+  is_primary: boolean;
+  effective_from: string;
+  effective_to?: string | null;
+}
+
+export interface LocationEmployeeListResponseDto {
+  items: LocationEmployeeDto[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export const locationApi = {
+  getLocations: (
+    params?: { search?: string; is_active?: boolean; limit?: number; offset?: number },
+    token?: string
+  ) =>
+    apiFetch<LocationListResponseDto>("/locations", {
+      token,
+      params,
+    }),
+
+  getLocationById: (id: string, token?: string) =>
+    apiFetch<LocationDto>(`/locations/${id}`, {
+      token,
+    }),
+
+  createLocation: (data: LocationCreateDto, token?: string) =>
+    apiFetch<LocationDto>("/locations", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  updateLocation: (id: string, data: LocationUpdateDto, token?: string) =>
+    apiFetch<LocationDto>(`/locations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deactivateLocation: (id: string, token?: string) =>
+    apiFetch<LocationDto>(`/locations/${id}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  verifyCoordinates: (data: GeofenceVerifyRequestDto, token?: string) =>
+    apiFetch<GeofenceVerifyResponseDto>("/locations/verify-coordinates", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getLocationEmployees: (
+    locationId: string,
+    params?: { search?: string; is_primary?: boolean; is_current?: boolean; page?: number; page_size?: number },
+    token?: string
+  ) =>
+    apiFetch<LocationEmployeeListResponseDto>(`/locations/${locationId}/employees`, {
+      token,
+      params,
+    }),
+};
+
+// =============================================================================
+// Phase 4: Employee Workplace Assignment DTOs & Endpoints
+// =============================================================================
+
+export interface WorkplaceAssignmentDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  location_id: string;
+  location_name: string;
+  location_code: string;
+  is_primary: boolean;
+  effective_from: string;
+  effective_to?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkplaceAssignmentCreateDto {
+  location_id: string;
+  is_primary?: boolean;
+  effective_from?: string;
+  effective_to?: string | null;
+}
+
+export interface WorkplaceAssignmentUpdateDto {
+  is_primary?: boolean;
+  effective_from?: string;
+  effective_to?: string | null;
+}
+
+export interface WorkplaceAssignmentListResponseDto {
+  items: WorkplaceAssignmentDto[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export const assignmentApi = {
+  getEmployeeWorkplaces: (
+    employeeId: string,
+    params?: { is_current?: boolean; page?: number; page_size?: number },
+    token?: string
+  ) =>
+    apiFetch<WorkplaceAssignmentListResponseDto>(`/employees/${employeeId}/workplaces`, {
+      token,
+      params,
+    }),
+
+  assignWorkplace: (
+    employeeId: string,
+    data: WorkplaceAssignmentCreateDto,
+    token?: string
+  ) =>
+    apiFetch<WorkplaceAssignmentDto>(`/employees/${employeeId}/workplaces`, {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  updateAssignment: (
+    employeeId: string,
+    assignmentId: string,
+    data: WorkplaceAssignmentUpdateDto,
+    token?: string
+  ) =>
+    apiFetch<WorkplaceAssignmentDto>(`/employees/${employeeId}/workplaces/${assignmentId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  endAssignment: (
+    employeeId: string,
+    assignmentId: string,
+    endDate?: string,
+    token?: string
+  ) =>
+    apiFetch<WorkplaceAssignmentDto>(
+      `/employees/${employeeId}/workplaces/${assignmentId}${endDate ? `?end_date=${encodeURIComponent(endDate)}` : ""}`,
+      {
+        method: "DELETE",
+        token,
+      }
+    ),
+
+  getMyWorkplaces: (token?: string) =>
+    apiFetch<WorkplaceAssignmentListResponseDto>("/employees/me/workplaces", {
+      token,
+    }),
+};
+
+// =============================================================================
+// Phase 4: Bulk Employee Import DTOs & Endpoints
+// =============================================================================
+
+export interface ImportJobDto {
+  id: string;
+  tenant_id: string;
+  created_by_user_id?: string | null;
+  file_name: string;
+  file_format: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  total_rows: number;
+  processed_rows: number;
+  succeeded_rows: number;
+  failed_rows: number;
+  last_processed_row_index: number;
+  error_summary?: Array<{ row_number: number; errors: string[] }> | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export interface ImportErrorsResponseDto {
+  job_id: string;
+  status: string;
+  total_rows: number;
+  failed_rows: number;
+  errors: Array<{ row_number: number; errors: string[] }>;
+}
+
+export const importApi = {
+  downloadTemplate: (format: "csv" | "xlsx" = "csv", token?: string) =>
+    apiFetch<Blob>(`/employees/import/template?format=${format}`, {
+      token,
+      responseType: "blob",
+    }),
+
+  uploadFile: (file: File, token?: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetch<ImportJobDto>("/employees/import", {
+      method: "POST",
+      body: formData,
+      token,
+    });
+  },
+
+  getJobStatus: (jobId: string, token?: string) =>
+    apiFetch<ImportJobDto>(`/employees/import/${jobId}`, {
+      token,
+    }),
+
+  getJobErrors: (jobId: string, token?: string) =>
+    apiFetch<ImportErrorsResponseDto>(`/employees/import/${jobId}/errors`, {
+      token,
+    }),
+
+  downloadErrorReport: (jobId: string, token?: string) =>
+    apiFetch<Blob>(`/employees/import/${jobId}/errors/download`, {
+      token,
+      responseType: "blob",
+    }),
+
+  retryJob: (jobId: string, token?: string) =>
+    apiFetch<ImportJobDto>(`/employees/import/${jobId}/retry`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      token,
+    }),
+};
+
+// =============================================================================
+// Phase 4: Employee Invitations & Account Activation DTOs & Endpoints
+// =============================================================================
+
+export interface InvitationDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  employee_name?: string | null;
+  employee_number?: string | null;
+  invited_by_user_id?: string | null;
+  email: string;
+  status: "pending" | "accepted" | "expired" | "revoked";
+  delivery_status: "pending" | "sent" | "failed";
+  delivery_error?: string | null;
+  attempt_count: number;
+  expires_at: string;
+  accepted_at?: string | null;
+  revoked_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  preview_url?: string | null;
+}
+
+export interface InvitationListResponseDto {
+  items: InvitationDto[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface ValidateInvitationResponseDto {
+  valid: boolean;
+  email: string;
+  employee_name: string;
+  company_name: string;
+  expires_at: string;
+}
+
+export interface ActivateAccountRequestDto {
+  token: string;
+  password: string;
+  password_confirm: string;
+}
+
+export interface ActivateAccountResponseDto {
+  success: boolean;
+  message: string;
+  user_id: string;
+  email: string;
+}
+
+export const invitationApi = {
+  // Administrative invitation endpoints
+  inviteEmployee: (employeeId: string, token?: string) =>
+    apiFetch<InvitationDto>(`/employees/${employeeId}/invite`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      token,
+    }),
+
+  getInvitations: (
+    params?: { status?: string; employee_id?: string; skip?: number; limit?: number },
+    token?: string
+  ) =>
+    apiFetch<InvitationListResponseDto>("/invitations", {
+      token,
+      params,
+    }),
+
+  getInvitationById: (id: string, token?: string) =>
+    apiFetch<InvitationDto>(`/invitations/${id}`, {
+      token,
+    }),
+
+  resendInvitation: (id: string, token?: string) =>
+    apiFetch<InvitationDto>(`/invitations/${id}/resend`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      token,
+    }),
+
+  revokeInvitation: (id: string, token?: string) =>
+    apiFetch<InvitationDto>(`/invitations/${id}/revoke`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      token,
+    }),
+
+  // Public activation endpoints (No authentication required)
+  validateToken: (tokenStr: string) =>
+    apiFetch<ValidateInvitationResponseDto>(`/auth/invitations/validate?token=${encodeURIComponent(tokenStr)}`),
+
+  activateAccount: (data: ActivateAccountRequestDto) =>
+    apiFetch<ActivateAccountResponseDto>("/auth/invitations/activate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+

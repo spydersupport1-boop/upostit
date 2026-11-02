@@ -5,23 +5,37 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import {
   organizationApi,
+  locationApi,
   DepartmentDto,
   DesignationDto,
   EmployeeDto,
+  LocationDto,
   ApiError,
 } from "@/lib/api";
+import LocationsTab from "@/components/LocationsTab";
+import InvitationsTab from "@/components/InvitationsTab";
+import ImportWizardModal from "@/components/ImportWizardModal";
+import WorkplaceAssignmentModal from "@/components/WorkplaceAssignmentModal";
+import InviteEmployeeModal from "@/components/InviteEmployeeModal";
+import MyWorkplacesCard from "@/components/MyWorkplacesCard";
 
 export default function OrganizationPage() {
   const { user, tenant, token, isAuthenticated, isLoading: isAuthLoading, login, logout, error: authContextError } = useAuth();
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "departments" | "designations">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "departments" | "designations" | "locations" | "invitations">("overview");
 
   // Data States
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [designations, setDesignations] = useState<DesignationDto[]>([]);
   const [employees, setEmployees] = useState<EmployeeDto[]>([]);
+  const [locations, setLocations] = useState<LocationDto[]>([]);
   const [totalEmployees, setTotalEmployees] = useState(0);
+
+  // Phase 4 Modals & Selections
+  const [showImportWizard, setShowImportWizard] = useState(false);
+  const [selectedEmpForAssignments, setSelectedEmpForAssignments] = useState<EmployeeDto | null>(null);
+  const [selectedEmpForInvite, setSelectedEmpForInvite] = useState<EmployeeDto | null>(null);
 
   // Employee Self-Access State (for employee role)
   const [myProfile, setMyProfile] = useState<EmployeeDto | null>(null);
@@ -98,6 +112,7 @@ export default function OrganizationPage() {
   });
 
   const isEmployeeRole = user?.role === "employee";
+  const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "hr";
 
   // ===========================================================================
   // Fetch Functions
@@ -202,6 +217,16 @@ export default function OrganizationPage() {
     }
   }, [token]);
 
+  const fetchLocations = useCallback(async () => {
+    if (!token) return;
+    try {
+      const resp = await locationApi.getLocations({ limit: 100 }, token);
+      setLocations(resp.items);
+    } catch {
+      // Non-blocking in background
+    }
+  }, [token]);
+
   // Initial and reactive data loads
   useEffect(() => {
     if (!isAuthenticated || !token) return;
@@ -212,8 +237,9 @@ export default function OrganizationPage() {
       fetchDepartments();
       fetchDesignations();
       fetchEmployees();
+      fetchLocations();
     }
-  }, [isAuthenticated, token, isEmployeeRole, fetchDepartments, fetchDesignations, fetchEmployees, fetchMyProfile]);
+  }, [isAuthenticated, token, isEmployeeRole, fetchDepartments, fetchDesignations, fetchEmployees, fetchLocations, fetchMyProfile]);
 
   // Tab switch handler
   useEffect(() => {
@@ -221,7 +247,8 @@ export default function OrganizationPage() {
     if (activeTab === "departments") fetchDepartments();
     if (activeTab === "designations") fetchDesignations();
     if (activeTab === "employees" || activeTab === "overview") fetchEmployees();
-  }, [activeTab, isAuthenticated, token, isEmployeeRole, fetchDepartments, fetchDesignations, fetchEmployees]);
+    if (activeTab === "locations" || activeTab === "overview") fetchLocations();
+  }, [activeTab, isAuthenticated, token, isEmployeeRole, fetchDepartments, fetchDesignations, fetchEmployees, fetchLocations]);
 
   // ===========================================================================
   // Inline Auth Handler
@@ -793,6 +820,9 @@ export default function OrganizationPage() {
             </div>
           </div>
         )}
+
+        {/* Assigned Workplace Locations (Phase 4) */}
+        <MyWorkplacesCard token={token} />
       </div>
     );
   }
@@ -833,7 +863,13 @@ export default function OrganizationPage() {
             Manage organizational hierarchy, departments, designations, and employee directory with live multi-tenant isolation.
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem" }}>
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowImportWizard(true)}>
+            📥 Bulk Import
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("locations")}>
+            📍 Locations
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowAddDeptModal(true)}>
             + Department
           </button>
@@ -893,12 +929,12 @@ export default function OrganizationPage() {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: "rgba(245, 158, 11, 0.12)", color: "var(--accent-amber)" }}>
-            🏖️
+          <div className="stat-icon" style={{ background: "rgba(6, 182, 212, 0.12)", color: "var(--accent-cyan)" }}>
+            📍
           </div>
           <div className="stat-content">
-            <div className="stat-val">{employees.filter((e) => e.status === "on_leave").length}</div>
-            <div className="stat-label">On Leave Today</div>
+            <div className="stat-val">{locations.length}</div>
+            <div className="stat-label">Workplaces</div>
           </div>
         </div>
       </div>
@@ -929,6 +965,18 @@ export default function OrganizationPage() {
         >
           Designations ({designations.length})
         </button>
+        <button
+          className={`tab-btn ${activeTab === "locations" ? "active" : ""}`}
+          onClick={() => setActiveTab("locations")}
+        >
+          Workplaces & Locations ({locations.length})
+        </button>
+        <button
+          className={`tab-btn ${activeTab === "invitations" ? "active" : ""}`}
+          onClick={() => setActiveTab("invitations")}
+        >
+          Invitations & Onboarding
+        </button>
       </div>
 
       {/* =======================================================================
@@ -958,6 +1006,42 @@ export default function OrganizationPage() {
               </p>
               <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("designations")}>
                 Manage Designations ({designations.length}) →
+              </button>
+            </div>
+
+            <div className="card">
+              <div className="card-title">
+                <span>📍</span> Workplace Locations & Geofences
+              </div>
+              <p className="card-desc">
+                Define physical headquarters, branch offices, and job sites with PostGIS spherical perimeters and GPS anti-spoofing boundaries.
+              </p>
+              <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("locations")}>
+                Manage Workplaces ({locations.length}) →
+              </button>
+            </div>
+
+            <div className="card">
+              <div className="card-title">
+                <span>✉️</span> Employee Invitations & Onboarding
+              </div>
+              <p className="card-desc">
+                Dispatch cryptographic invitation tokens, monitor delivery statuses, and track Argon2id password activation workflows.
+              </p>
+              <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("invitations")}>
+                View Invitations Console →
+              </button>
+            </div>
+
+            <div className="card">
+              <div className="card-title">
+                <span>📥</span> Bulk Employee Import
+              </div>
+              <p className="card-desc">
+                Onboard hundreds of workers in minutes via CSV or Excel spreadsheets with Celery asynchronous processing and chunk rollback.
+              </p>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowImportWizard(true)}>
+                Launch Import Wizard →
               </button>
             </div>
 
@@ -1100,9 +1184,22 @@ export default function OrganizationPage() {
                 ))}
               </select>
 
-              <button className="btn btn-primary" onClick={() => setShowAddEmpModal(true)}>
-                + New Employee
-              </button>
+              {canManage && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowImportWizard(true)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+                  title="Bulk import employees via CSV/XLSX"
+                >
+                  📥 Bulk Import
+                </button>
+              )}
+
+              {canManage && (
+                <button className="btn btn-primary" onClick={() => setShowAddEmpModal(true)}>
+                  + New Employee
+                </button>
+              )}
             </div>
           </div>
 
@@ -1152,24 +1249,46 @@ export default function OrganizationPage() {
                           </span>
                         </td>
                         <td>
-                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                             <button className="btn btn-secondary btn-sm" onClick={() => setSelectedEmp(emp)}>
                               View
                             </button>
-                            <button className="btn btn-secondary btn-sm" onClick={() => openEditEmp(emp)}>
-                              Edit
-                            </button>
+                            {canManage && (
+                              <button className="btn btn-secondary btn-sm" onClick={() => openEditEmp(emp)}>
+                                Edit
+                              </button>
+                            )}
                             <button
-                              className={`btn btn-sm ${emp.status === "active" ? "btn-danger" : "btn-secondary"}`}
-                              onClick={() =>
-                                handleUpdateEmployeeStatus(
-                                  emp.id,
-                                  emp.status === "active" ? "inactive" : "active"
-                                )
-                              }
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => setSelectedEmpForAssignments(emp)}
+                              title="Manage assigned workplace locations"
+                              style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
                             >
-                              {emp.status === "active" ? "Deactivate" : "Activate"}
+                              📍 Workplaces
                             </button>
+                            {canManage && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setSelectedEmpForInvite(emp)}
+                                title="Invite employee to activate account"
+                                style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+                              >
+                                ✉️ Invite
+                              </button>
+                            )}
+                            {canManage && (
+                              <button
+                                className={`btn btn-sm ${emp.status === "active" ? "btn-danger" : "btn-secondary"}`}
+                                onClick={() =>
+                                  handleUpdateEmployeeStatus(
+                                    emp.id,
+                                    emp.status === "active" ? "inactive" : "active"
+                                  )
+                                }
+                              >
+                                {emp.status === "active" ? "Deactivate" : "Activate"}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1362,6 +1481,27 @@ export default function OrganizationPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* =======================================================================
+          TAB 5: WORKPLACE LOCATIONS (PHASE 4 - MILESTONES 1 & 2)
+          ======================================================================= */}
+      {activeTab === "locations" && (
+        <LocationsTab
+          token={token}
+          canManage={canManage}
+          onLocationsUpdated={fetchLocations}
+        />
+      )}
+
+      {/* =======================================================================
+          TAB 6: EMPLOYEE INVITATIONS (PHASE 4 - MILESTONE 4)
+          ======================================================================= */}
+      {activeTab === "invitations" && (
+        <InvitationsTab
+          token={token}
+          canManage={canManage}
+        />
       )}
 
       {/* =======================================================================
@@ -2118,6 +2258,46 @@ export default function OrganizationPage() {
           </div>
         </div>
       )}
+
+      {/* =======================================================================
+          PHASE 4 MODALS
+          ======================================================================= */}
+      <WorkplaceAssignmentModal
+        isOpen={Boolean(selectedEmpForAssignments)}
+        onClose={() => setSelectedEmpForAssignments(null)}
+        employee={selectedEmpForAssignments}
+        locations={locations}
+        token={token}
+        canManage={canManage}
+        onAssignmentsUpdated={() => {
+          fetchEmployees();
+        }}
+      />
+
+      <ImportWizardModal
+        isOpen={showImportWizard}
+        onClose={() => setShowImportWizard(false)}
+        token={token}
+        onImportCompleted={() => {
+          fetchEmployees();
+          fetchDepartments();
+          fetchDesignations();
+          fetchLocations();
+        }}
+      />
+
+      <InviteEmployeeModal
+        isOpen={Boolean(selectedEmpForInvite)}
+        onClose={() => setSelectedEmpForInvite(null)}
+        employee={selectedEmpForInvite}
+        token={token}
+        onInvitationSent={() => {
+          fetchEmployees();
+          if (selectedEmpForInvite) {
+            setPageSuccess(`Invitation issued to ${selectedEmpForInvite.work_email}.`);
+          }
+        }}
+      />
 
       {/* Footer */}
       <footer className="footer" style={{ marginTop: "4rem" }}>

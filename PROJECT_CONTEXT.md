@@ -21,7 +21,7 @@
   - **Backend API**: High-performance Python 3.12 + FastAPI modular monolith providing REST APIs, authentication, rule evaluation, and integration endpoints.
   - **Future Integrations**: On-premise biometric hardware terminals (HMAC-signed), BLE/NFC office beacons, and edge CCTV gateway stream processing (Python + OpenCV + GStreamer).
 - **Current Stage**: **Stage B: Attendance Core**
-- **Current Phase**: **Phase 4 — Employees & Workplaces (Locations, Geofencing, Batch Import & Invites)** (Status: *Implementation Plan Rev 2.0 Prepared in `docs/PHASE_04_PLAN.md` — Awaiting Owner Approval*)
+- **Current Phase**: **Phase 4 — Employees & Workplaces (Locations, Geofencing, Batch Import & Invites)** (Status: *Phase 4 Fully Complete across all 5 Milestones on branch `phase-04`; Live Supabase database revision `d7a42e88b301`; All frontend interfaces integrated with FastAPI backend without mock data; 172 backend pytest tests passing, 36 frontend tests passing, ESLint 0 warnings/errors, Ruff & Mypy 0 errors in 41 files, production Next.js build succeeding with 7/7 static routes; Awaiting user approval before beginning Phase 5*)
 
 ---
 
@@ -357,17 +357,21 @@ API_BASE_URL=http://localhost:8000
 | **2026-11-01** | Live Functional & Cross-Tenant Probe | Synthetic test tenants on live Supabase | **Passed (100%)** | Verified same-tenant relationships, circular dept-manager FK, nullable relationships, cross-tenant FK blocked (`IntegrityError`), RLS cross-tenant isolation verified. Clean cleanup confirmed. |
 | **2026-11-01** | Live E2E Phase 2 & Phase 3 Regression | Full FastAPI HTTP API flows against live Supabase | **Passed (100%)** | Registration (201), login (200), `/me` (200), refresh rotation & reuse detection (401), logout (200), Phase 3 department/designation/employee CRUD (201/200), clean cleanup verified. |
 | **2026-11-01** | Phase 3.3 HttpOnly Cookie Migration & Concurrency Lock | Live E2E API tests & frontend unit tests | **Passed (100%)** | Zero localStorage tokens; refresh token in HttpOnly cookie (`Path=/api/v1/auth`, `SameSite=lax`); access token in React memory; reload rehydration verified; active promise concurrency lock; 10/10 live checks passed, 19/19 web tests passed. |
+| **2026-11-02** | `alembic upgrade b7d41a89c204` | Phase 4 Milestone 1 live Supabase migration | **Passed** | Applied `b7d41a89c204` to live Supabase; verified `locations` and `employee_locations`, PostGIS generated coordinates, `excl_emp_primary_workplace_overlap` exclusion constraint (`btree_gist`), forced RLS, 96 backend tests passed. |
+| **2026-11-02** | Phase 4 Milestone 2 Workplace Assignments | Workplace assignment CRUD & self-access | **Passed** | Implemented workplace assignments, employee self-access endpoint, roster listings, single primary workplace constraint with historical preservation, 122 backend tests passed. |
+| **2026-11-02** | Phase 4 Milestone 3 Bulk Employee Import | CSV/XLSX parsing, Celery task, storage service, chunking & retry idempotency | **Passed (100%)** | Implemented `import_jobs` table, composite tenant FK `(tenant_id, created_by_user_id) -> users(tenant_id, id)` with column-specific `ON DELETE SET NULL (created_by_user_id)` (PostgreSQL 17 compliant), forced RLS, unapplied migration `c8e52a91f034` (offline verified). Storage service with tenant-isolated S3/MinIO paths and strict production durability (`STORAGE_ALLOW_MEMORY_FALLBACK=False`); CSV & XLSX parser; 100-row chunk processing in Celery worker task; chunk transaction rollback protection; checkpoint bookmarking `last_processed_row_index`; `with_for_update()` concurrency locking; safe broker failure recovery (HTTP 503); spreadsheet formula injection sanitization; failure CSV generation. 151 backend tests passed (100%), 19 frontend tests passed, Ruff clean, Mypy clean. |
+| **2026-11-02** | `alembic upgrade c8e52a91f034` | Phase 4 Milestone 3 live Supabase migration & verification | **Passed (100%)** | Applied `c8e52a91f034` to live Supabase; verified `import_jobs` table, 18 columns, 4 indexes, forced RLS, tenant isolation policy, cross-tenant isolation, composite FK `ON DELETE SET NULL (created_by_user_id)` preserving `tenant_id` on user deletion, 151 backend tests (100%), 19 frontend tests (100%), Ruff clean, Mypy clean. |
 
 ---
 
 ## 10. Phase Tracker (22 Phases)
 
 | Phase | Stage | Name & Core Objective | Status | Completion Criteria & Evidence |
-| :---: | :--- | :--- | :---: | :--- |
+| :---: | :--- | :--- | :--- | :--- |
 | **01** | Stage A | **Project Setup & Monorepo Foundation** | **Audited** | Monorepo layout, Next.js web build (passed), Flutter starter (ready), FastAPI (`/health`, `/ready` passed), Supabase PostgreSQL + PostGIS verified, Alembic loader verified, CI workflow (4 jobs). Docker & Flutter CLI blocked on host tooling. Conditionally ready for Phase 2. |
 | **02** | Stage A | **Auth and Tenants** | **Complete** | Tenant registration, Argon2id, JWT access & refresh tokens with rotation and reuse detection, RBAC permissions (5 roles), transaction-scoped `app.tenant_id`, RLS migration `4f61a7dd311e` executed on Supabase, 34 automated unit/API tests passing, live PostgreSQL RLS isolation verified 100%. |
 | **03** | Stage A | **Organization Structure & Employee Management** | **Complete** | Departments, Designations, Employee profiles & lifecycle (CRUD, search, filtering, pagination), RBAC matrix, `GET /employees/me` self-access, directory denial for employee role, synchronized user deactivation & session revocation, composite tenant foreign keys, typed API client, Next.js `/organization` dashboard, Phase 3.3 secure HttpOnly cookie migration (zero localStorage tokens, memory access tokens, in-flight promise lock), 65 backend tests, 19 web tests passing. Migration `e6331816d336` applied and verified live on Supabase. |
-| **04** | Stage B | **Employees & Workplaces** | **Planned** | Comprehensive implementation plan prepared in `docs/PHASE_04_PLAN.md` covering PostGIS workplace locations (`ST_DWithin`), geofences, bulk CSV/XLSX employee import Celery worker, invite flow. Awaiting owner approval. |
+| **04** | Stage B | **Employees & Workplaces** | **In Progress** | Milestone 1 (`b7d41a89c204` live), Milestone 2 (workplace assignments), and Milestone 3 (`c8e52a91f034` live, bulk employee import, Celery chunks) complete. 151 backend tests and 19 frontend tests passing. Awaiting owner authorization to begin Milestone 4. |
 | **05** | Stage B | **Shifts and Punch Engine** | **Not Started** | Shift templates, append-only `attendance_events`, pure calculation engine deriving `attendance_days`, idempotency. |
 | **06** | Stage B | **Mobile Check-in (Flutter)** | **Not Started** | Flutter mobile app, geofence verification, offline queue, randomized jitter retry, status screen. |
 | **07** | Stage B | **Fraud Shield v1** | **Not Started** | Device binding, check-in selfie capture, mock GPS detection, clock drift check, risk score calculation. |
@@ -390,6 +394,41 @@ API_BASE_URL=http://localhost:8000
 ---
 
 ## 11. Change History
+
+### [2026-11-02] — Phase 4 — Milestone 4: Employee Invitations & Account Activation
+- **Phase**: Phase 4 Milestone 4 (Employee Invitations & Account Activation)
+- **Summary**:
+  - Implemented `EmployeeInvitation` SQLAlchemy model and migration `d7a42e88b301_phase_04_employee_invitations.py` (`down_revision = 'c8e52a91f034'`).
+  - Enforced tenant-safe composite foreign keys: `fk_invitations_employee` (`(tenant_id, employee_id) -> employees(tenant_id, id) ON DELETE CASCADE`) and `fk_invitations_user` (`(tenant_id, invited_by_user_id) -> users(tenant_id, id) ON DELETE SET NULL (invited_by_user_id)`).
+  - Enforced database-level partial unique index: `uq_invitations_active_employee` on `(tenant_id, employee_id) WHERE status = 'pending'`, strictly preventing concurrent or duplicate active invitations per employee.
+  - Enforced PostgreSQL Row-Level Security (`ENABLE ROW LEVEL SECURITY; FORCE ROW LEVEL SECURITY;`) with tenant isolation policy and role permissions.
+  - Built pluggable `EmailDeliveryService` abstraction (`services/api/common/email.py`) supporting SMTP, safe development preview, and in-memory test queue with PII-safe masking (`mask_email`) and zero raw-token logging in production.
+  - Implemented full administrative invitation lifecycle API (`POST /api/v1/employees/{id}/invite`, `GET /api/v1/invitations`, `GET /api/v1/invitations/{id}`, `POST /api/v1/invitations/{id}/resend`, `POST /api/v1/invitations/{id}/revoke`), restricted to authorized Owner, Admin, and HR users via `Permission.INVITE_EMPLOYEES`.
+  - Implemented secure public account activation API (`GET /api/v1/auth/invitations/validate`, `POST /api/v1/auth/invitations/activate`):
+    - Concurrency row-locking via `with_for_update()`.
+    - Maximum 5 failed attempts lockout (returns HTTP 429).
+    - Single-use token enforcement; token hashes only (SHA-256), never storing raw tokens.
+    - Password hashing using enterprise Argon2id implementation (`services/api/auth/security.py`).
+    - Atomic transaction: user record creation, `employee.user_id` linkage, invitation status update to `accepted`, and revocation of any other outstanding invitations.
+    - Strict cross-tenant isolation and email spoofing prevention.
+  - Added 21 automated tests in `tests/test_phase4_invitations.py` covering valid/expired/revoked/reused tokens, lockout, spoofing, concurrent activation, RBAC, and cross-tenant access. All 172 backend tests and 19 frontend tests passing.
+  - Validated offline Alembic SQL upgrade and downgrade without applying migration to live Supabase.
+- **Affected Files**:
+  - `database/migrations/versions/d7a42e88b301_phase_04_employee_invitations.py`
+  - `database/migrations/env.py`
+  - `services/api/config.py`
+  - `services/api/common/email.py`
+  - `services/api/common/__init__.py`
+  - `services/api/employees/models.py`
+  - `services/api/employees/__init__.py`
+  - `services/api/employees/invitation_schemas.py`
+  - `services/api/employees/invitation_service.py`
+  - `services/api/employees/invitation_routes.py`
+  - `services/api/employees/routes.py`
+  - `services/api/auth/routes.py`
+  - `services/api/main.py`
+  - `tests/test_phase4_invitations.py`
+  - `PROJECT_CONTEXT.md`
 
 ### [2026-11-01] — Phase 3.3: Secure Refresh Token Migration to HttpOnly Cookies
 - **Phase**: Phase 3.3 (Security Hardening — HttpOnly Cookie Migration)
@@ -552,6 +591,96 @@ API_BASE_URL=http://localhost:8000
   - `docs/PHASE_02.md`
   - `PROJECT_CONTEXT.md`
 
+### [2026-11-02] — Phase 4 Milestone 2: Employee Workplace Assignments Complete
+- **Phase**: Phase 4 (Employees & Workplaces)
+- **Summary**:
+  - Implemented complete employee workplace assignment backend architecture without requiring new database migrations or schema alterations.
+  - Endpoints delivered:
+    - `POST /api/v1/employees/{employee_id}/workplaces`: Assigns a workplace to an active employee with primary status, date validity checks, duplicate prevention, and overlapping primary conflict checks.
+    - `GET /api/v1/employees/{employee_id}/workplaces`: Lists paginated workplace assignments for an employee with current-effectiveness filtering.
+    - `GET /api/v1/employees/me/workplaces`: Employee self-access endpoint strictly resolving calling user context (`VIEW_OWN_PROFILE`), rejecting client-supplied IDs.
+    - `PUT /api/v1/employees/{employee_id}/workplaces/{assignment_id}`: Updates primary status or assignment dates; checks for conflicting primary assignments without silently modifying other assignments.
+    - `DELETE /api/v1/employees/{employee_id}/workplaces/{assignment_id}`: Safely ends an assignment by updating `effective_to` (defaults to today or specified date), preserving historical audit logs without hard deleting records.
+    - `GET /api/v1/locations/{location_id}/employees`: Lists employees assigned to a workplace location with search, pagination, and primary/current filtering.
+  - Security & RBAC:
+    - OWNER, ADMIN, and HR authorized to mutate assignments via `Permission.UPDATE_EMPLOYEES`.
+    - MANAGER restricted to read-only access (`Permission.VIEW_EMPLOYEES`, `Permission.VIEW_LOCATIONS`).
+    - EMPLOYEE restricted to own workplaces via `/employees/me/workplaces` (`Permission.VIEW_OWN_PROFILE`).
+    - Strict tenant isolation enforced in all queries.
+  - Error Handling:
+    - Application-level and database-level constraint handling translating `excl_emp_primary_workplace_overlap`, `uq_emp_loc_assignment`, and `chk_emp_loc_dates` to clean HTTP 409/400 errors.
+  - Quality & Regression:
+    - Added 26 unit and integration tests (`tests/test_phase4_workplace_assignments.py`); verified 122 backend tests pass, clean Ruff, clean Mypy (33 files), 19 frontend tests pass, and clean ESLint.
+- **Affected Files**:
+  - `services/api/locations/schemas.py`
+  - `services/api/locations/assignment_service.py`
+  - `services/api/employees/routes.py`
+  - `services/api/locations/routes.py`
+  - `tests/test_phase4_workplace_assignments.py`
+  - `docs/PHASE_04_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-02] — Phase 4 Milestone 1: Live Supabase Migration Applied & Verified (b7d41a89c204)
+- **Phase**: Phase 4 (Employees & Workplaces)
+- **Summary**:
+  - Pre-migration validation: Confirmed branch `phase-04`, working tree clean, live Alembic revision `e6331816d336`, tables `locations` and `employee_locations` absent, baseline records intact (2 tenants, 2 users, 4 tokens, 0 depts/designations/employees). PostGIS 3.3.7 verified installed and `btree_gist` 1.7 verified available.
+  - Applied migration `b7d41a89c204_phase_04_workplace_locations_and_geofences` to live Supabase PostgreSQL via `alembic upgrade b7d41a89c204`. Alembic current verified at `b7d41a89c204 (head)`.
+  - Verified live schema:
+    - Tables: `locations` and `employee_locations` created.
+    - Security: PostgreSQL RLS enabled and forced (`relrowsecurity=True`, `relforcerowsecurity=True`) with `tenant_isolation` policies on both tables.
+    - Foreign keys: Composite tenant-aware FKs `(tenant_id, employee_id) -> employees(tenant_id, id)` and `(tenant_id, location_id) -> locations(tenant_id, id)` with `ON DELETE CASCADE`.
+    - Check constraints: Lat [-90, 90], Lon [-180, 180], Radius [10, 50000], and date sequence (`effective_to >= effective_from`).
+    - Spatial & PostGIS: Generated column `coordinates geography(Point, 4326) GENERATED ALWAYS AS (st_setsrid(st_makepoint(longitude, latitude), 4326)::geography) STORED` with GiST spatial index `ix_locations_spatial`.
+    - Exclusion constraint: `excl_emp_primary_workplace_overlap` on `(tenant_id WITH =, employee_id WITH =, daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]'::text) WITH &&)` where `is_primary = true` using `btree_gist`.
+  - Executed comprehensive live functional tests inside rolled back transactions:
+    - Workplace location created, automatically generating PostGIS point `POINT(77.6744 12.9249)`.
+    - Cross-tenant isolation verified under RLS `authenticated` role (cross-tenant select returned 0 rows).
+    - Database check constraints rejected invalid coordinates (lat 95.0, lon 195.0) and invalid radius (5m).
+    - Geofence distance verification confirmed inside point (11m, within geofence) vs outside point (1117m, outside geofence).
+    - Assignment overlap tests: Non-overlapping primary workplaces accepted; overlapping primary workplaces rejected with `ExclusionViolation`; non-primary overlapping workplaces accepted; multiple open-ended primary workplaces rejected.
+    - All temporary rows rolled back; verified 0 remaining rows in `locations`, `employee_locations`, and `employees`.
+  - Executed full regression suite: 96 backend tests passed, Ruff clean, Mypy clean (32 files), 19 frontend tests passed, Next.js ESLint clean.
+- **Affected Files**:
+  - `docs/PHASE_04_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-02] — Phase 4: Milestone 1 Complete (Database Foundation & Workplace Locations)
+- **Phase**: Phase 4 (Employees & Workplaces)
+- **Summary**:
+  - Implemented `Location` and `EmployeeLocation` SQLAlchemy models with composite tenant foreign keys, lat/long/radius check constraints, JSONB Wi-Fi BSSID/IP lists, temporal exclusion constraint (`excl_emp_primary_workplace_overlap` using `btree_gist` and `daterange`) preventing overlapping primary workplace assignments across all dates, and partial unique index (`uq_emp_active_primary_location`) for active primary lookups.
+  - Generated unapplied Alembic migration `b7d41a89c204_phase_04_workplace_locations_and_geofences.py` chaining from `e6331816d336`. Includes generated `coordinates geography(Point, 4326)` column with spatial GiST index (`ix_locations_spatial`), `btree_gist` exclusion constraint, forced RLS policies, and role grants.
+  - Implemented Location CRUD APIs with strict RBAC (`MANAGE_LOCATIONS`, `VIEW_LOCATIONS`), ISO 3166-1 country code validation, IANA timezone validation (`zoneinfo`), and geofence coordinate verification probe (`POST /locations/verify-coordinates`) using PostGIS `ST_DWithin` / `ST_Distance` with spherical Haversine fallback and explicit threat boundary notice.
+  - Added 31 new automated unit/integration tests across schemas, RBAC, business rules (including date range intersection logic), and API routes; verified all 96 backend tests and 19 frontend tests pass with zero warnings, clean Ruff, and clean Mypy.
+- **Affected Files**:
+  - `services/api/auth/permissions.py`
+  - `services/api/locations/__init__.py`
+  - `services/api/locations/models.py`
+  - `services/api/locations/schemas.py`
+  - `services/api/locations/service.py`
+  - `services/api/locations/routes.py`
+  - `services/api/main.py`
+  - `database/migrations/env.py`
+  - `database/migrations/versions/b7d41a89c204_phase_04_workplace_locations_and_geofences.py`
+  - `tests/test_phase4_schemas.py`
+  - `tests/test_phase4_rbac.py`
+  - `tests/test_phase4_business_rules.py`
+  - `tests/test_phase4_locations_api.py`
+  - `docs/PHASE_04_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-01] — Phase 3.3: HttpOnly Cookie Refresh Token Migration
+- **Phase**: Phase 3 (Organization Structure & Employee Management)
+- **Summary**:
+  - Migrated frontend refresh token handling from `localStorage` to HttpOnly secure cookies.
+  - Updated `apiFetch` in `apps/web/src/lib/api.ts` to enforce `credentials: "include"`, memory-only access tokens, and automatic single-flight retry on 401 using the backend cookie transport.
+  - Added legacy token cleaner `clearLegacyTokens()` to purge historical localStorage artifacts.
+  - Expanded frontend tests to 19 passing tests covering HttpOnly transport and token recovery.
+- **Affected Files**:
+  - `apps/web/src/lib/api.ts`
+  - `apps/web/src/lib/auth-context.tsx`
+  - `apps/web/src/lib/api.test.ts`
+  - `PROJECT_CONTEXT.md`
+
 ### [2026-11-01] — Phase 3.2: Final Security, UX and Production Readiness Audit
 - **Phase**: Phase 3 (Organization Structure & Employee Management)
 - **Summary**:
@@ -646,16 +775,68 @@ API_BASE_URL=http://localhost:8000
 - **Phase**: Phase 1 (Project Setup & Monorepo Foundation)
 - **Summary**: Initialized git repository, created initial `PROJECT_CONTEXT.md`, `docs/RULES.md`, `docs/ARCHITECTURE.md`, and `docs/PHASE_01.md` baseline (Commit `8e1a2e9`).
 
+### [2026-11-03] — Phase 4 Milestone 4: Employee Invitations Live Supabase Migration & Verification (Revision d7a42e88b301)
+- **Phase**: Phase 4 (Employees & Workplaces — Milestone 4)
+- **Summary**:
+  - Confirmed pre-migration state on branch `phase-04` at live revision `c8e52a91f034`.
+  - Applied Alembic migration `d7a42e88b301` (`d7a42e88b301_phase_04_employee_invitations.py`) directly to live Supabase PostgreSQL database.
+  - Live verified `employee_invitations` table in public schema, all 15 expected columns, data types, nullability constraints, and indexes.
+  - Verified partial unique index `uq_invitations_active_employee` (`WHERE status = 'pending'`), rejecting duplicate active invitations for the same employee.
+  - Verified composite foreign keys: `fk_invitations_employee` (`CASCADE`) and `fk_invitations_user` (`ON DELETE SET NULL (invited_by_user_id)`).
+  - Verified user deletion sets `invited_by_user_id = NULL` while preserving `tenant_id` intact.
+  - Verified Row-Level Security (`ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY`), `tenant_isolation` policy, and cross-tenant isolation under `SET LOCAL ROLE authenticated`.
+  - Executed all functional tests within an isolated transaction and cleanly rolled back all synthetic test records without modifying business data.
+  - Ran full regression test suite: 172 backend pytest tests passing (100%), Ruff linting passing with 0 errors, Mypy type-checking passing with 0 issues in 41 files, and 19 frontend tests passing with 0 ESLint warnings or errors.
+- **Affected Files**:
+  - `database/migrations/versions/d7a42e88b301_phase_04_employee_invitations.py` (Migrated live)
+  - `PROJECT_CONTEXT.md` (Updated)
+  - `docs/PHASE_04_PLAN.md` (Updated)
+
+### [2026-11-03] — Phase 4 Milestone 5: Frontend Integration & Final Phase 4 Verification Complete
+- **Phase**: Phase 4 (Employees & Workplaces — Milestone 5)
+- **Summary**:
+  - Completed complete frontend integration for all Phase 4 features in Next.js 14 App Router, TypeScript, and Tailwind/Vanilla CSS design system:
+    1. *Employee Workplace Management*: Interactive modal (`WorkplaceAssignmentModal`), historical assignment visibility, multi-workplace assignment, primary designation with temporal dates, non-destructive assignment end, and employee self-service card (`MyWorkplacesCard`).
+    2. *Workplace Location Management*: Comprehensive location dashboard and standalone page (`/locations`, `LocationsTab`), create/edit modals, coordinate & geofence inputs, interactive Leaflet map component (`GeofenceMap`) with dynamic draggable marker and circular geofence overlay (`L.circle`), interactive coordinate test probe with PostGIS distance feedback, and location employee roster modal (`LocationRosterModal`).
+    3. *Bulk Employee Import Wizard*: 7-step wizard modal (`ImportWizardModal`) with CSV/XLSX template download, drag-and-drop file upload (<=5MB), client-side preview, pre-validation checks, Celery progress bar polling, metrics grid, and downloadable failure CSV error report.
+    4. *Employee Invitation Management*: Directory invitation action (`InviteEmployeeModal`), invitations status table (`InvitationsTab`) with filters (all, pending, accepted, expired, revoked), resend invitation, revoke invitation, and delivery failure diagnostic popover.
+    5. *Public Account Activation Page*: Dedicated `/activate?token=...` page with token validation, safe employee and company display, real-time password strength meter, password confirmation validation, Argon2id activation submission, and success redirect to login.
+  - Verified security and data integrity: access tokens remain strictly in memory, HttpOnly cookie refresh preserved, zero mock data introduced, and zero internal tenant IDs or token hashes leaked to public pages.
+  - Added 17 new frontend unit/integration tests in `apps/web/src/lib/api.test.ts` (36 total tests, 9 suites, 100% pass rate).
+  - Executed full test and verification suite:
+    - Frontend Tests: `npm --prefix apps/web test` (36 tests passed, 0 failures).
+    - Frontend Linting: `npm --prefix apps/web run lint` (0 errors, 0 warnings).
+    - Production Next.js Build: `npm --prefix apps/web run build` (7/7 static routes compiled and optimized cleanly).
+    - Backend Tests: `make test` (172 pytest tests passed, 100%).
+    - Backend Linting: `make lint` (Ruff passed, Mypy passed across 41 source files with 0 issues).
+- **Affected Files**:
+  - `apps/web/src/app/organization/page.tsx`
+  - `apps/web/src/app/locations/page.tsx`
+  - `apps/web/src/app/activate/page.tsx`
+  - `apps/web/src/components/GeofenceMap.tsx`
+  - `apps/web/src/components/WorkplaceAssignmentModal.tsx`
+  - `apps/web/src/components/LocationRosterModal.tsx`
+  - `apps/web/src/components/ImportWizardModal.tsx`
+  - `apps/web/src/components/InviteEmployeeModal.tsx`
+  - `apps/web/src/components/InvitationsTab.tsx`
+  - `apps/web/src/components/LocationsTab.tsx`
+  - `apps/web/src/components/MyWorkplacesCard.tsx`
+  - `apps/web/src/lib/api.ts`
+  - `apps/web/src/lib/api.test.ts`
+  - `apps/web/package.json` & `apps/web/package-lock.json`
+  - `apps/web/tsconfig.json`
+  - `PROJECT_CONTEXT.md`
+  - `docs/PHASE_04_PLAN.md`
+
 ---
 
 ## 12. Next Actions
 
-1. **Immediate Task**: Await project owner review and approval of the Phase 4 Implementation Plan Revision 2.0 ([docs/PHASE_04_PLAN.md](file:///Users/apple/Upostit/docs/PHASE_04_PLAN.md)).
-2. **Phase 4 Execution (Pending Owner Approval)**:
-   - Do NOT start implementation code or schema changes until owner approval is received.
-   - Upon approval, create branch `phase-04` and execute the 5 core workstreams:
-     - Workstream 1: Database models & Alembic migration for `locations`, `employee_locations`, `import_jobs`, and `employee_invitations` with forced RLS.
-     - Workstream 2: Location management API & spatial geofencing verification (`ST_DWithin`).
-     - Workstream 3: Employee workplace assignments and self-access endpoints.
-     - Workstream 4: Asynchronous Celery CSV/Excel batch import pipeline with line-by-line error reporting.
-     - Workstream 5: Employee invitation lifecycle, activation codes, and web UI screens.
+1. **Immediate Task**: STOP after Phase 4 Milestone 5 Frontend Integration & Final Verification. Phase 4 is FULLY COMPLETE across all 5 milestones. 172 backend tests & 36 frontend tests passing. Zero lint errors. Production build verified. Await project owner authorization before starting Phase 5 (Attendance Engine & Ledger).
+2. **Phase 4 Execution Roadmap**:
+   - [x] **Milestone 1 — Database Foundation & Workplace Locations**: Models, applied live Alembic migration `b7d41a89c204`, PostGIS generated coordinates, GiST index, `btree_gist` temporal primary exclusion constraint, forced RLS, CRUD APIs, `POST /locations/verify-coordinates` probe, 31 new tests (96 total backend, 19 frontend). **COMPLETE & LIVE MIGRATION VERIFIED**.
+   - [x] **Milestone 2 — Employee Workplace Assignments**: Assignment CRUD, primary workplace management, date validation, employee self-access endpoint (`GET /api/v1/employees/me/workplaces`), location roster (`GET /locations/{id}/employees`), 26 new tests (122 total backend, 19 frontend). **COMPLETE**.
+   - [x] **Milestone 3 — Bulk Employee Import**: Asynchronous Celery CSV/XLSX pipeline, shared MinIO/S3 storage, 2,000-row limit, downloadable failure CSV, PostgreSQL 17 column-specific composite FK syntax, formula injection sanitization, concurrency locking, and chunk rollback protection. Migration `c8e52a91f034` applied and verified live on Supabase. 29 new tests (151 total backend, 19 frontend). **COMPLETE & LIVE MIGRATION VERIFIED**.
+   - [x] **Milestone 4 — Employee Invitations & Activation**: Complete invitation lifecycle, Argon2id passwords, single-use acceptance, 5-attempt lockout, PII-safe email service, composite foreign keys (CASCADE on employee, SET NULL (invited_by_user_id) on user), partial unique index on pending invitations, forced RLS. Migration `d7a42e88b301` applied and verified live on Supabase. 21 new tests (172 total backend, 19 frontend). **COMPLETE & LIVE MIGRATION VERIFIED**.
+   - [x] **Milestone 5 — Frontend Integration & Verification**: Leaflet maps, assignment UI, import wizard, invitation manager, public activation page, 36 frontend tests, production build, full regression audit. **COMPLETE**.
+3. **Strict Boundaries**: STOP execution after Milestone 5. Do NOT begin Phase 5 without explicit owner authorization.

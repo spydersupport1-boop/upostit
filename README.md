@@ -120,11 +120,20 @@ flutter run -d ios --dart-define=API_BASE_URL=http://localhost:8000
 
 Run all automated checks across the monorepo:
 ```bash
-# Run pytest tests
+# Backend pytest tests (172 tests)
 make test
 
-# Run linting across Python and Web
+# Backend linting (Ruff) and static typing (Mypy)
 make lint
+
+# Frontend tests (36 tests via native test runner)
+make web-test
+
+# Frontend ESLint
+make web-lint
+
+# Next.js production build
+make web-build
 ```
 
 ---
@@ -133,6 +142,7 @@ make lint
 
 Before making any changes, review:
 - [`PROJECT_CONTEXT.md`](file:///Users/apple/Upostit/PROJECT_CONTEXT.md): Current phase status, 22-phase tracker, and change log.
+- [`docs/PHASE_04_PLAN.md`](file:///Users/apple/Upostit/docs/PHASE_04_PLAN.md): Phase 4 specification, architecture, and verification records.
 - [`docs/RULES.md`](file:///Users/apple/Upostit/docs/RULES.md): Architecture, multi-tenancy, and security guidelines.
 - [`docs/ARCHITECTURE.md`](file:///Users/apple/Upostit/docs/ARCHITECTURE.md): Detailed system design and component diagrams.
 - [`docs/PHASE_01.md`](file:///Users/apple/Upostit/docs/PHASE_01.md): Phase 1 definition of done and execution tracking.

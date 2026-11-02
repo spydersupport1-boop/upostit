@@ -10,7 +10,9 @@ from fastapi.responses import JSONResponse
 from services.api.auth.routes import router as auth_router
 from services.api.config import settings
 from services.api.database import check_database_connection, check_postgis_capability
+from services.api.employees.invitation_routes import router as invitations_router
 from services.api.employees.routes import router as employees_router
+from services.api.locations.routes import router as locations_router
 from services.api.organization.routes import (
     departments_router,
     designations_router,
@@ -44,6 +46,8 @@ api_v1_router.include_router(tenants_router)
 api_v1_router.include_router(departments_router)
 api_v1_router.include_router(designations_router)
 api_v1_router.include_router(employees_router)
+api_v1_router.include_router(invitations_router)
+api_v1_router.include_router(locations_router)
 
 app.include_router(api_v1_router)
 

@@ -19,6 +19,7 @@ from services.api.organization.schemas import (
 # Department Services
 # ==============================================================================
 
+
 async def create_department(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -96,7 +97,9 @@ async def list_departments(
 ) -> tuple[list[Department], int]:
     """Lists departments for the tenant with optional search and active filtering."""
     query = select(Department).where(Department.tenant_id == tenant_id)
-    count_query = select(func.count()).select_from(Department).where(Department.tenant_id == tenant_id)
+    count_query = (
+        select(func.count()).select_from(Department).where(Department.tenant_id == tenant_id)
+    )
 
     if is_active is not None:
         query = query.where(Department.is_active == is_active)
@@ -232,6 +235,7 @@ async def deactivate_department(
 # Designation Services
 # ==============================================================================
 
+
 async def create_designation(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -291,7 +295,9 @@ async def list_designations(
 ) -> tuple[list[Designation], int]:
     """Lists designations for the tenant with optional search and active filtering."""
     query = select(Designation).where(Designation.tenant_id == tenant_id)
-    count_query = select(func.count()).select_from(Designation).where(Designation.tenant_id == tenant_id)
+    count_query = (
+        select(func.count()).select_from(Designation).where(Designation.tenant_id == tenant_id)
+    )
 
     if is_active is not None:
         query = query.where(Designation.is_active == is_active)

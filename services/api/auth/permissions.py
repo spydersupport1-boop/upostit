@@ -29,6 +29,11 @@ class Permission(StrEnum):
     VIEW_EMPLOYEES = "view_employees"
     UPDATE_EMPLOYEES = "update_employees"
     DEACTIVATE_EMPLOYEES = "deactivate_employees"
+    # Phase 4 Workplace & Onboarding Permissions
+    MANAGE_LOCATIONS = "manage_locations"
+    VIEW_LOCATIONS = "view_locations"
+    IMPORT_EMPLOYEES = "import_employees"
+    INVITE_EMPLOYEES = "invite_employees"
 
 
 # Role-to-Permissions Mapping (Deny by default)
@@ -45,6 +50,10 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_EMPLOYEES,
         Permission.UPDATE_EMPLOYEES,
         Permission.DEACTIVATE_EMPLOYEES,
+        Permission.MANAGE_LOCATIONS,
+        Permission.VIEW_LOCATIONS,
+        Permission.IMPORT_EMPLOYEES,
+        Permission.INVITE_EMPLOYEES,
     },
     UserRole.ADMIN: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -58,6 +67,10 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_EMPLOYEES,
         Permission.UPDATE_EMPLOYEES,
         Permission.DEACTIVATE_EMPLOYEES,
+        Permission.MANAGE_LOCATIONS,
+        Permission.VIEW_LOCATIONS,
+        Permission.IMPORT_EMPLOYEES,
+        Permission.INVITE_EMPLOYEES,
     },
     UserRole.HR: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -68,12 +81,16 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_EMPLOYEES,
         Permission.UPDATE_EMPLOYEES,
         Permission.DEACTIVATE_EMPLOYEES,
+        Permission.VIEW_LOCATIONS,
+        Permission.IMPORT_EMPLOYEES,
+        Permission.INVITE_EMPLOYEES,
     },
     UserRole.MANAGER: {
         Permission.VIEW_COMPANY_PROFILE,
         Permission.VIEW_OWN_PROFILE,
         Permission.VIEW_ORGANIZATION,
         Permission.VIEW_EMPLOYEES,
+        Permission.VIEW_LOCATIONS,
     },
     UserRole.EMPLOYEE: {
         Permission.VIEW_OWN_PROFILE,
