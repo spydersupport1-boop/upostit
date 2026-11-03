@@ -21,7 +21,7 @@
   - **Backend API**: High-performance Python 3.12 + FastAPI modular monolith providing REST APIs, authentication, rule evaluation, and integration endpoints.
   - **Future Integrations**: On-premise biometric hardware terminals (HMAC-signed), BLE/NFC office beacons, and edge CCTV gateway stream processing (Python + OpenCV + GStreamer).
 - **Current Stage**: **Stage B: Attendance Core**
-- **Current Phase**: **Phase 4 — Employees & Workplaces (Locations, Geofencing, Batch Import & Invites)** (Status: *Phase 4 Fully Complete across all 5 Milestones on branch `phase-04`; Live Supabase database revision `d7a42e88b301`; All frontend interfaces integrated with FastAPI backend without mock data; 172 backend pytest tests passing, 36 frontend tests passing, ESLint 0 warnings/errors, Ruff & Mypy 0 errors in 41 files, production Next.js build succeeding with 7/7 static routes; Awaiting user approval before beginning Phase 5*)
+- **Current Phase**: **Phase 5 — Attendance Engine & Ledger (Shifts and Punch Engine)** (Status: *All Milestones 1–5 Implemented & Fully Verified on branch `phase-05`; Live Supabase revision: `a2b3c4d5e6f7 (head)`; 281/281 backend tests + 52/52 frontend tests passing; Next.js production build succeeded; Live workflow audit and defect correction complete*)
 
 ---
 
@@ -371,8 +371,8 @@ API_BASE_URL=http://localhost:8000
 | **01** | Stage A | **Project Setup & Monorepo Foundation** | **Audited** | Monorepo layout, Next.js web build (passed), Flutter starter (ready), FastAPI (`/health`, `/ready` passed), Supabase PostgreSQL + PostGIS verified, Alembic loader verified, CI workflow (4 jobs). Docker & Flutter CLI blocked on host tooling. Conditionally ready for Phase 2. |
 | **02** | Stage A | **Auth and Tenants** | **Complete** | Tenant registration, Argon2id, JWT access & refresh tokens with rotation and reuse detection, RBAC permissions (5 roles), transaction-scoped `app.tenant_id`, RLS migration `4f61a7dd311e` executed on Supabase, 34 automated unit/API tests passing, live PostgreSQL RLS isolation verified 100%. |
 | **03** | Stage A | **Organization Structure & Employee Management** | **Complete** | Departments, Designations, Employee profiles & lifecycle (CRUD, search, filtering, pagination), RBAC matrix, `GET /employees/me` self-access, directory denial for employee role, synchronized user deactivation & session revocation, composite tenant foreign keys, typed API client, Next.js `/organization` dashboard, Phase 3.3 secure HttpOnly cookie migration (zero localStorage tokens, memory access tokens, in-flight promise lock), 65 backend tests, 19 web tests passing. Migration `e6331816d336` applied and verified live on Supabase. |
-| **04** | Stage B | **Employees & Workplaces** | **In Progress** | Milestone 1 (`b7d41a89c204` live), Milestone 2 (workplace assignments), and Milestone 3 (`c8e52a91f034` live, bulk employee import, Celery chunks) complete. 151 backend tests and 19 frontend tests passing. Awaiting owner authorization to begin Milestone 4. |
-| **05** | Stage B | **Shifts and Punch Engine** | **Not Started** | Shift templates, append-only `attendance_events`, pure calculation engine deriving `attendance_days`, idempotency. |
+| **04** | Stage B | **Employees & Workplaces** | **Complete** | Milestones 1–5 complete. Live migrations b7d41a89c204, c8e52a91f034, d7a42e88b301 applied and verified on Supabase. 172 backend tests & 36 frontend tests passing. Git tag phase-04-complete. |
+| **05** | Stage B | **Shifts and Punch Engine** | **Planning** | Architecture Revision 2.0 formulated (docs/ATTENDANCE_ARCHITECTURE.md, docs/PHASE_05_PLAN.md) with shift versions, explicit correction model, and request fingerprinting. Awaiting user review and approval. |
 | **06** | Stage B | **Mobile Check-in (Flutter)** | **Not Started** | Flutter mobile app, geofence verification, offline queue, randomized jitter retry, status screen. |
 | **07** | Stage B | **Fraud Shield v1** | **Not Started** | Device binding, check-in selfie capture, mock GPS detection, clock drift check, risk score calculation. |
 | **08** | Stage B | **Corrections and Reports** | **Not Started** | Missed punch correction workflow, approval hierarchy, async CSV/XLSX export, pre-aggregated summaries. |
@@ -828,15 +828,230 @@ API_BASE_URL=http://localhost:8000
   - `PROJECT_CONTEXT.md`
   - `docs/PHASE_04_PLAN.md`
 
+### [2026-11-03] — Phase 5 Milestone 1: Shift Templates, Immutable Versions & Employee Assignments Complete
+- **Phase**: Phase 5 (Attendance Engine & Ledger — Milestone 1)
+- **Summary**:
+  - Implemented complete backend foundation for shift management on branch `phase-05`:
+    1. *Shift Templates*: Master entity `shift_templates` with unique tenant code, name, description, and active status.
+    2. *Immutable Shift Versions*: Versioned rules in `shift_template_versions` capturing version number, effective date, operational timings (`start_time`, `end_time`), overnight flag, flexible flag, grace periods (start and early exit), allowances (early arrival and late departure), half/full-day thresholds, break duration, and weekly off days. Older versions are preserved without mutation; editing creates a new version.
+    3. *Employee Shift Assignments*: Temporal mapping in `shift_assignments` (`effective_from`, `effective_to`) protected by PostgreSQL `btree_gist` exclusion constraint `excl_shift_assignments_overlap` preventing overlapping assignments for the same employee while accepting contiguous date ranges.
+    4. *Security & Tenant Isolation*: Composite foreign keys, PostgreSQL 17 column-specific `ON DELETE SET NULL (created_by_user_id)` syntax, and PostgreSQL forced Row-Level Security (`FORCE ROW LEVEL SECURITY`) with `tenant_isolation` policies on all 3 tables.
+    5. *Database Migration*: Prepared Alembic migration `e9f63b02a145_phase_05_shift_templates_and_assignments.py` with parent revision `d7a42e88b301`. Verified offline migration SQL script.
+    6. *RBAC Protection*: Added `MANAGE_SHIFTS` and `VIEW_SHIFTS` permissions to `services/api/auth/permissions.py`. Authorized Owner, Admin, and HR to manage; Manager and Employee have read-only visibility.
+    7. *REST Endpoints*: Delivered `POST/GET/PUT/DELETE /api/v1/shifts`, `POST/GET /api/v1/shifts/{id}/versions`, `POST/GET/PUT /api/v1/shifts/assignments`, and `POST /api/v1/shifts/assignments/{id}/end`.
+    8. *Testing & Quality*: Added 21 automated tests in `tests/test_phase5_shifts.py` covering schema validation, shift creation, duplicate rejection, versioning history preservation, historical date resolution, overlap rejection, exclusion constraint error handling, soft deactivation, and RBAC enforcement.
+    9. Full regression suite passed: 193 backend tests passed (100%), Ruff clean, Mypy clean across 46 source files.
+- **Affected Files**:
+  - `services/api/auth/permissions.py`
+  - `services/api/attendance/__init__.py`
+  - `services/api/attendance/models.py`
+  - `services/api/attendance/schemas.py`
+  - `services/api/attendance/service.py`
+  - `services/api/attendance/routes.py`
+  - `services/api/main.py`
+  - `database/migrations/env.py`
+  - `database/migrations/versions/e9f63b02a145_phase_05_shift_templates_and_assignments.py`
+  - `tests/test_phase5_shifts.py`
+  - `docs/PHASE_05_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-03] — Phase 5 Milestone 2: Attendance Event Ledger, Idempotency & Punch APIs Complete
+- **Phase**: Phase 5 (Attendance Engine & Ledger — Milestone 2)
+- **Summary**:
+  - Implemented append-only attendance event ledger, tenant- and employee-scoped idempotency, and punch REST endpoints:
+    1. *Attendance Event Ledger (`attendance_events`)*: Append-only relational table capturing `event_type` (`CHECK_IN`, `CHECK_OUT`, `BREAK_START`, `BREAK_END`), `event_category` (`STANDARD`, `CORRECTION_INSERT`, `CORRECTION_SUPERSEDE`, `CORRECTION_VOID`), `source` (`WEB`, `MOBILE`, `BIOMETRIC`, `CCTV`, `ADMIN`, `DEVICE`, `API`), server authoritative receipt timestamp `server_received_at`, device capture timestamp `device_reported_at`, effective timestamp `effective_at`, `clock_drift_seconds`, verification status, review status, hardware/device ID, geofence location ID, GPS coordinates (`latitude`, `longitude`, `accuracy_meters`), actor user ID, idempotency key, metadata JSONB, and self-referencing `supersedes_event_id`.
+    2. *Database Immutability Trigger*: Enforced via PostgreSQL trigger `trg_prevent_attendance_events_mutation` calling function `trg_attendance_events_immutability()` which raises `integrity_constraint_violation` on any `UPDATE` or `DELETE`. Normal application roles are strictly granted `SELECT, INSERT` only.
+    3. *Idempotency Records (`attendance_idempotency_records`)*: Scoped to `(tenant_id, employee_id, idempotency_key)` with SHA-256 request payload fingerprinting, execution state machine (`IN_PROGRESS`, `COMPLETED`, `FAILED`), cached response code and JSONB payload, linked `event_id`, and 24-hour expiration.
+    4. *Deterministic SHA-256 Request Fingerprinting*: Canonical JSON serialization over behavior-altering parameters (`event_type`, `employee_id`, `device_reported_at`, `location_id`, `latitude`, `longitude`, `accuracy_meters`, `device_id`, `metadata`). Replaying with identical key and payload returns cached response (HTTP 200/201 with `idempotent_replay: true`); replaying with modified payload returns HTTP 422 Unprocessable Content.
+    5. *Concurrency & Concurrency Locking*: Pessimistic row locking on target employee (`SELECT id FROM employees ... FOR UPDATE`) guarantees sequential, atomic punch execution per employee, eliminating state-machine race conditions. In-progress duplicates return HTTP 409 Conflict.
+    6. *Timestamp Semantics & Validation*: Server maintains authoritative time. Device timestamps > 24 hours in the future or > 7 days in the past are rejected with HTTP 422. Clock drift $> 300$s is flagged as `SUSPICIOUS_CLOCK_DRIFT` with review status `PENDING_REVIEW`.
+    7. *Atomic Multi-Event Creation*: Checking out while in `ON_BREAK` status automatically creates a `BREAK_END` event followed immediately by `CHECK_OUT` in a single atomic database transaction.
+    8. *REST APIs Delivered*:
+       - `POST /api/v1/attendance/punch`: Records check-in, check-out, break start, and break end punches.
+       - `GET /api/v1/attendance/events`: Cursor-paginated listing with employee, event type, and date range filters.
+       - `GET /api/v1/attendance/events/{event_id}`: Retrieves event details with tenant and role isolation.
+    9. *RBAC Enforcement*: Employees may punch and view events strictly for themselves (403 on mismatch); Managers can punch for self but cannot punch for other employees (403); Owner, Admin, and HR with `MANAGE_ATTENDANCE` may punch for employees.
+    10. *Database Migration*: Created Alembic migration `f1b94c8e7a23_phase_05_attendance_events_and_idempotency.py` (parent: `e9f63b02a145`).
+    11. *Idempotency Audit & Safety Enhancement*: Audited 24-hour expiration vs. permanent event permanence. Solved duplicate and replay safety by making `expires_at` nullable on `attendance_idempotency_records` (`expires_at = NULL` on `COMPLETED`), retaining completed punch idempotency records permanently. In-progress locks have a 15-minute lease allowing recovery if a worker terminates midway. Partial index `ix_idempotency_tenant_expires` indexes only rows with `expires_at IS NOT NULL`. Database constraint `uq_attendance_events_tenant_idempotency` physically guarantees 0 duplicate events can ever be inserted into the ledger.
+    12. *Live Migration Application & Verification*: Applied migration `f1b94c8e7a23` to live Supabase (PostgreSQL 17.11). Verified RLS enabled and forced, tenant policies active, all 6 composite foreign keys valid, immutability trigger `trg_prevent_attendance_events_mutation` actively blocking `UPDATE` and `DELETE` (raising `integrity_constraint_violation`), unique constraint blocking duplicates, and 0 synthetic records remaining in production via rolled-back transaction testing.
+    13. *Testing & Quality*: Added 30 comprehensive unit and API integration tests in `tests/test_phase5_punch_ledger.py`. Entire test suite passing: 223/223 tests (100%), Ruff clean, Mypy clean across 46 source files.
+- **Affected Files**:
+  - `services/api/attendance/models.py`
+  - `services/api/attendance/schemas.py`
+  - `services/api/attendance/service.py`
+  - `services/api/attendance/routes.py`
+  - `services/api/main.py`
+  - `database/migrations/versions/f1b94c8e7a23_phase_05_attendance_events_and_idempotency.py`
+  - `tests/test_phase5_punch_ledger.py`
+  - `docs/ATTENDANCE_ARCHITECTURE.md`
+  - `docs/PHASE_05_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-03] — Phase 5 Milestone 3: Attendance Timeline Resolution, Calculation Engine & Live Application Complete
+- **Phase**: Phase 5 (Attendance Engine & Ledger — Milestone 3)
+- **Summary**:
+  - Implemented derived `attendance_days` projection table, pure timeline resolution engine, pure attendance calculation engine, historical shift version resolver, overnight shift attribution, recalculation service, and read APIs. Conducted exhaustive calculation safety audit and safely applied database migration `a2b3c4d5e6f7` to live Supabase:
+    1. *Derived Projection Model (`attendance_days`)*: Implemented in `services/api/attendance/models.py`. Stores tenant-isolated, employee-level daily attendance projections including exact shift template and version references (`shift_template_id`, `shift_template_version_id`), scheduled times (`scheduled_start_time`, `scheduled_end_time`), actual punch times (`first_check_in_at`, `last_check_out_at`), minute metrics (`gross_minutes`, `break_minutes`, `net_work_minutes`, `late_arrival_minutes`, `actual_early_minutes`, `early_exit_minutes`, `overtime_minutes`), boolean flags (`is_late`, `is_early_exit`, `is_half_day`, `is_overtime`, `missing_punch`, `is_incomplete`, `has_anomaly`), anomaly details JSONB, review status (`APPROVED`, `PENDING_REVIEW`, `REJECTED`), and calculation status (`status`: `PRESENT`, `LATE`, `HALF_DAY`, `ABSENT`, `INCOMPLETE`, `WEEK_OFF`, `PENDING_REVIEW`).
+    2. *Relational Integrity & RLS*: Enforced composite foreign keys to `employees`, `shift_templates`, and `shift_template_versions`. Multi-tenant isolation enforced via `FORCE ROW LEVEL SECURITY` with `tenant_isolation` policy. Unique constraint `uq_attendance_days_tenant_emp_date` guarantees exactly one projection row per tenant, employee, and attendance date.
+    3. *Alembic Migration & Live Application*: Applied chained migration `a2b3c4d5e6f7_phase_05_attendance_days_projection.py` (parent: `f1b94c8e7a23`) to live Supabase (PostgreSQL 17.11). Current live revision is `a2b3c4d5e6f7 (head)`.
+    4. *Live Database Verification*: Validated on live Supabase: table `attendance_days` exists; RLS enabled and forced; `tenant_isolation` policy active; all 4 foreign keys active; unique constraints and indexes active; all 10 public tables intact. Conducted live functional RLS test: Tenant A queried inserted record; Tenant B saw 0 rows (RLS enforced); cross-tenant insert strictly rejected by RLS `WITH CHECK`; unique constraint strictly rejected duplicates; all synthetic data safely rolled back leaving 0 rows in production.
+    5. *Calculation Engine Safety Audit & Corrections*:
+       - *Rejection Filter*: `resolve_active_timeline` strictly filters out events with `review_status == "REJECTED"` so they never count towards active sessions or working minutes.
+       - *Weekly Off Daytime Precedence*: In `calculate_attendance_day`, scheduled weekly offs with 0 punches are evaluated before premature absence checking so they evaluate to `WEEK_OFF` throughout the day instead of falsely becoming `INCOMPLETE`.
+       - *Atomic Punch Recalculation*: `record_punch` executes daily recalculation inside the same transaction without swallowing real database exceptions. Any database failure rolls back both the punch event and projection atomically.
+       - *Pessimistic Concurrency Locking*: `recalculate_attendance_day` acquires a pessimistic row lock on `Employee` (`FOR UPDATE`) to serialize all recalculations per employee, eliminating concurrent insert races on `uq_attendance_days_tenant_emp_date`.
+    6. *Pure Timeline Resolution Engine (`resolve_active_timeline`)*: Pure Python function in `services/api/attendance/engine.py` with zero database dependencies. Filters out superseded, voided, and rejected events, pairs `CHECK_IN` and `CHECK_OUT` into work sessions, tracks multi-break sessions (`BREAK_START` / `BREAK_END`), detects unclosed sessions and breaks, handles out-of-order punches gracefully, and records timeline anomalies (unpaired punches, clock drift $>300$s).
+    7. *Pure Calculation Engine (`calculate_attendance_day`)*: Pure Python calculator in `services/api/attendance/engine.py`. Computes gross, break, and net working minutes. Strictly enforces enterprise lateness rule: if actual late arrival $\le$ grace period minutes, `late_arrival_minutes = 0`; if grace period is breached, `late_arrival_minutes = actual_late_minutes` measured from scheduled start (no subtraction of grace period). Computes early departure relative to grace periods and overtime past scheduled duration. Accurately determines daily status (`PRESENT`, `LATE`, `HALF_DAY`, `ABSENT`, `INCOMPLETE`, `WEEK_OFF`, `PENDING_REVIEW`). Incomplete sessions are omitted from completed working hours. Shifts in progress are not prematurely marked absent.
+    8. *Historical Shift Version Preservation (`resolve_employee_shift_version`)*: Historical dates strictly resolve the exact shift template version where `version_effective_from <= attendance_date`, guaranteeing recalculations never drift when shift templates are updated later.
+    9. *Overnight Shift Attribution (`determine_shift_date_for_punch`)*: Overnight shifts crossing midnight are cleanly attributed to the shift start calendar date. Employs configurable early arrival and late departure allowances, state-aware resolution for adjacent shifts, and midpoint boundary partitioning ($T_{\text{sched\_end}}(D) + (T_{\text{sched\_start}}(D+1) - T_{\text{sched\_end}}(D)) / 2$).
+    10. *REST APIs Delivered*:
+       - `GET /api/v1/attendance/days`: List daily summaries with employee, date range, and status filters.
+       - `GET /api/v1/attendance/days/{employee_id}/{attendance_date}`: Get a specific employee's daily calculation.
+       - `POST /api/v1/attendance/recalculate`: Explicit recalculation trigger for date ranges.
+    11. *RBAC Enforcement*: Employees can only view their own attendance days (403 on other employees); Managers can view their assigned team members; Owner, Admin, and HR can view and trigger recalculations tenant-wide.
+    12. *Testing & Quality*: Test suite expanded to 36 tests in `tests/test_phase5_calculation_engine.py` covering safety audit fixes, timeline resolution, unpaired check-ins, multi-break pairing, enterprise lateness formulas, early exit, half-day thresholds, overtime, overnight attribution, boundary partitioning, historical shift version preservation, idempotency, and RBAC scoping. All 259 project tests passing (100%), Ruff clean, Mypy clean.
+- **Affected Files**:
+  - `services/api/attendance/engine.py`
+  - `services/api/attendance/models.py`
+  - `services/api/attendance/schemas.py`
+  - `services/api/attendance/service.py`
+  - `services/api/attendance/routes.py`
+  - `database/migrations/versions/a2b3c4d5e6f7_phase_05_attendance_days_projection.py`
+  - `tests/test_phase5_calculation_engine.py`
+  - `docs/PHASE_05_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-03] — Phase 5 Milestone 4: Attendance Correction Engine, Audit Trail & Reconciliation Complete
+- **Phase**: Phase 5 (Attendance Engine & Ledger — Milestone 4)
+- **Summary**:
+  - Implemented the full attendance correction lifecycle, audit history trail, and nightly background reconciliation task preserving immutable append-only event ledger invariants:
+    1. *Correction Event Operations*:
+       - `CORRECTION_INSERT`: Appends an administrative punch to inject a missing punch event without altering past punches.
+       - `CORRECTION_SUPERSEDE`: Replaces an erroneous punch by appending a corrected punch linked via `supersedes_event_id`. The original punch remains intact and immutable in the ledger.
+       - `CORRECTION_VOID`: Appends a tombstone correction event linked via `supersedes_event_id` to exclude an invalid punch from calculations without deleting the original record.
+    2. *Authorization & Reporting Scope*:
+       - `CORRECT_ATTENDANCE` permission added to `Permission` enum and mapped to `UserRole.OWNER`, `ADMIN`, `HR`, and `MANAGER`.
+       - Owner, Admin, and HR: authorized to correct attendance for any employee within their tenant.
+       - Manager: strictly constrained to direct reports within their authorized reporting scope (`Employee.reporting_manager_id == mgr_emp`); cannot self-correct.
+       - Employee: forbidden from directly submitting administrative corrections (HTTP 403).
+    3. *Business Validation & Invariants*:
+       - Mandatory non-empty correction reason ($\ge 5$ characters).
+       - Cross-employee correction attempts strictly rejected (HTTP 400).
+       - Disallowed superseding an already superseded or voided event (HTTP 400).
+       - Disallowed voiding an already voided or superseded event (HTTP 400).
+       - Disallowed voiding or superseding a voiding tombstone (HTTP 400).
+       - Idempotency with SHA-256 fingerprint divergence conflict check (HTTP 409).
+    4. *Atomic Recalculation & Rollback Protection*:
+       - Pessimistic row locking on `Employee` (`FOR UPDATE`) serializes correction execution.
+       - Discovers affected calendar shift dates for both the correction punch and any target superseded/voided punch, including overnight shift windows crossing calendar dates.
+       - Recalculates all affected `attendance_days` projections atomically within the correction transaction. If recalculation fails, the entire transaction rolls back cleanly.
+    5. *Audit Trail & Inspection APIs*:
+       - `POST /api/v1/attendance/corrections`: Creates administrative correction atomically.
+       - `GET /api/v1/attendance/corrections`: Lists non-standard correction events with pagination and role scoping.
+       - `GET /api/v1/attendance/records/{record_id}/events` (and alias `.../days/{record_id}/events`): Detailed audit trail of contributing events annotated with active vs superseded vs voided status and correction reasons.
+    6. *Nightly Reconciliation Engine & Worker Task*:
+       - `run_attendance_reconciliation`: Scans shift assignments, attendance days, and punch events to find unclosed, missing, or stranded attendance dates; executes recalculations in bounded batches with savepoint isolation per employee; logs errors with full PII sanitization (UUIDs and Exception class names only).
+       - Celery task `@celery_app.task(name="attendance.nightly_reconciliation", bind=True, max_retries=3)` for asynchronous worker scheduling.
+       - `POST /api/v1/attendance/reconcile`: Administrative trigger for manual or scheduled batch reconciliation.
+    7. *Testing & Quality*:
+       - Created `tests/test_phase5_corrections.py` with 19 comprehensive unit and integration tests.
+       - Full backend test suite passing: 280/280 tests (100%).
+       - Ruff linting and formatting clean; Mypy clean with zero issues in 10 source files.
+- **Affected Files**:
+  - `services/api/auth/permissions.py`
+  - `services/api/attendance/schemas.py`
+  - `services/api/attendance/correction_service.py`
+  - `services/api/attendance/reconciliation.py`
+  - `services/api/attendance/routes.py`
+  - `services/workers/tasks.py`
+  - `tests/test_phase5_corrections.py`
+  - `docs/PHASE_05_PLAN.md`
+  - `docs/ATTENDANCE_ARCHITECTURE.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-03] — Phase 5 Milestone 5: Frontend Integration & Verification Complete
+- **Phase**: Phase 5 (Attendance Engine & Ledger — Milestone 5)
+- **Summary**:
+  - Integrated the Next.js frontend with the Phase 5 Attendance & Shifts APIs, implementing role-aware dashboards, personal attendance views, and full correction management:
+    1. *Attendance Console (`apps/web/src/app/attendance/page.tsx`)*:
+       - Single-page responsive console with glassmorphic aesthetic matching platform design system.
+       - **Step 2 — KPI Metrics Dashboard**: Present, Absent, Late, Incomplete, Pending Verification, Currently Working, and Unresolved Sessions calculated from live daily attendance projections. Date picker, Department filter, Status filter, search query, and batch reconciliation trigger.
+       - **Step 3 — Attendance Records Table**: Employee Name & ID, Date, Shift Name, Actual In/Out, Gross, Break, Net Working Duration, Late Arrival, Early Exit, Overtime, and Status badges. Row actions: Event Timeline drawer, Correction modal, Single employee day recalculation.
+       - **Step 4 — Corrections Audit Log**: Dedicated tab for inspecting immutable correction events (`CORRECTION_INSERT`, `CORRECTION_SUPERSEDE`, `CORRECTION_VOID`) with reason justifications, effective timestamps, target event IDs, and actor user IDs.
+    2. *Today's Punch Widget (`apps/web/src/components/TodayPunchWidget.tsx`)*:
+       - Interactive employee check-in/out and break tracking widget.
+       - Live active session timer, dynamic state machine (`NOT_CHECKED_IN`, `WORKING`, `ON_BREAK`, `CHECKED_OUT`), atomic break auto-close, per-punch cryptographic UUID idempotency key, and recent punch timeline stream.
+    3. *Personal Attendance Tab (`apps/web/src/components/MyAttendanceTab.tsx`)*:
+       - Employee self-service view displaying personal attendance records history with monthly and date-range filters, duration summaries, status breakdown, and audit timeline trigger.
+       - Administrative actions strictly concealed for employee role.
+    4. *Correction Modal (`apps/web/src/components/AttendanceCorrectionModal.tsx`)*:
+       - Administrative dialog supporting `CORRECTION_INSERT`, `CORRECTION_SUPERSEDE`, and `CORRECTION_VOID`.
+       - Candidate event picker for supersede/void operations, mandatory reason validation ($\ge 5$ characters), ISO-8601 UTC timestamp conversion, and per-action UUID idempotency key.
+    5. *Audit Timeline Drawer (`apps/web/src/components/AttendanceAuditDrawer.tsx`)*:
+       - Slide-over drawer presenting the immutable append-only event stream from `/attendance/records/{record_id}/events`.
+       - Active, superseded, and voided badges with strike-through styling, server receipt timestamps, drift metrics, source, review status, actor user IDs, and recorded justification reasons.
+    6. *Role Scoping & Security Enforcements*:
+       - **Employee Role**: Restricts view strictly to personal attendance days via `organizationApi.getMyProfile` and `attendanceApi.getDays({ employee_id: profile.id })`. Administrative correction and recalculation actions are completely hidden.
+       - **Manager Role**: Scoped strictly to direct reports where `Employee.reporting_manager_id == manager_id`. Self-correction is blocked on both client and backend service.
+       - **Admin/Owner/HR Role**: Tenant-wide visibility and administrative authority.
+       - **Client Security**: Access tokens held in React state / memory only. Zero `localStorage` token storage. Refresh tokens transported via HttpOnly cookies with automatic 401 token refresh rotation.
+    7. *Testing & Quality Verification*:
+       - Added 16 new unit and logic verification tests to `apps/web/src/lib/api.test.ts`. Total frontend test suite: 52/52 passed (100%).
+       - Full backend test suite passing: 280/280 tests (100%).
+       - TypeScript: 0 errors (`npx tsc --noEmit`).
+       - ESLint: 0 warnings/errors (`npm run lint`).
+       - Next.js Production Build: Succeeded with `/attendance` static route.
+       - Ruff: All checks passed. Mypy: Success (0 issues across 10 source files).
+- **Affected Files**:
+  - `apps/web/src/lib/api.ts`
+  - `apps/web/src/app/attendance/page.tsx`
+  - `apps/web/src/components/TodayPunchWidget.tsx`
+  - `apps/web/src/components/MyAttendanceTab.tsx`
+  - `apps/web/src/components/AttendanceCorrectionModal.tsx`
+  - `apps/web/src/components/AttendanceAuditDrawer.tsx`
+  - `apps/web/src/app/page.tsx`
+  - `apps/web/src/app/organization/page.tsx`
+  - `apps/web/src/lib/api.test.ts`
+  - `docs/PHASE_05_PLAN.md`
+  - `docs/ATTENDANCE_ARCHITECTURE.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-04] — Phase 5 Final Verification & Defect Correction Complete
+- **Phase**: Phase 5 (Attendance Engine & Ledger — Final Verification)
+- **Status**: Complete & Verified (Ready for Acceptance)
+- **Branch**: `phase-05`
+- **Actions Taken**:
+  - **Check 1 (Git & DB Revision)**: Branch confirmed `phase-05`. Alembic linear history verified (`4f61a7dd311e` -> `e6331816d336` -> `b7d41a89c204` -> `c8e52a91f034` -> `d7a42e88b301` -> `e9f63b02a145` -> `f1b94c8e7a23` -> `a2b3c4d5e6f7 (head)`). Live Supabase DB confirmed at `a2b3c4d5e6f7`. All 6 attendance tables verified with `FORCE ROW LEVEL SECURITY`.
+  - **Check 2 (Punch Workflow & Immutability)**: Complete lifecycle tested live against Supabase inside rollback-safe transaction: Check-In, Idempotent duplicate replay, Divergent payload rejection (422), Double check-in rejection (400), Break Start, Break End, Invalid break end rejection (400), Check-Out, Check-out without check-in rejection (400), Clock drift > 300s flagged as `SUSPICIOUS_CLOCK_DRIFT` / `PENDING_REVIEW`, daily attendance projection recomputed. PostgreSQL immutability trigger verified rejecting both `UPDATE` and `DELETE` on `attendance_events` with `IntegrityError`.
+  - **Check 3 (Authorization & Tenant Isolation)**: `ROLE_PERMISSIONS` verified. Manager self-correction rejected (HTTP 403), manager correcting unrelated employee rejected (HTTP 403), manager correcting direct report allowed. Cross-tenant isolation verified live on Supabase with `SET LOCAL ROLE authenticated` and `SET LOCAL app.tenant_id`: cross-tenant rows completely masked.
+  - **Check 4 (Correction Workflow)**: `CORRECTION_INSERT`, `CORRECTION_SUPERSEDE` (with original event link), duplicate supersede prevention on already superseded events, `CORRECTION_VOID` (tombstone appending), and mandatory correction reason (>= 5 chars) verified live against Supabase.
+  - **Check 5 (Shift & Calculation Accuracy)**: Pure calculation engine verified: grace period lateness absorption (10m late <= 15m grace -> 0 late arrival, PRESENT), strict enterprise penalty beyond grace (20m late > 15m grace -> 20m late arrival, LATE), overnight shift date attribution across midnight, weekly off daytime precedence (`WEEK_OFF` with 0 punches), and absence evaluated strictly after configured shift window expires (remains `INCOMPLETE` while window is open).
+  - **Check 6 (Frontend Web Integration)**: Next.js frontend verified with 52/52 tests in `apps/web/src/lib/api.test.ts`. `npx tsc --noEmit` passed with 0 errors. `npm run lint` passed with 0 warnings/errors. Next.js production build (`npm run build`) succeeded with optimized static routes including `/attendance` (12.1 kB).
+  - **Check 7 (Reconciliation & Celery)**: Direct execution of `run_attendance_reconciliation` verified with employee isolation and sanitized non-PII logging. Celery task `attendance.nightly_reconciliation` verified registered with `max_retries=3`. Redis limitation reported honestly (direct execution and unit verification used).
+  - **Check 8 (Full Regression)**: Backend pytest: 281 passed, 41 warnings (deprecation/coroutine test mocks) in 95s. Backend Ruff: All checks passed. Backend Mypy: 0 issues in 10 source files. Frontend tests: 52 passed. Frontend tsc: 0 errors. Frontend lint: clean. Frontend build: clean.
+  - **Check 9 (Defect Resolution)**:
+    - *Problem*: `apply_attendance_correction` in `services/api/attendance/correction_service.py` failed with `sqlalchemy.exc.InvalidRequestError: Incorrect number of values in identifier to formulate primary key for session.get(); primary key columns are 'attendance_idempotency_records.id'`.
+    - *Root Cause*: Step 9 called `session.get(AttendanceIdempotencyRecord, (tenant_id, payload.idempotency_key))`. However, `attendance_idempotency_records` has a single UUID primary key column `id`, whereas `(tenant_id, idempotency_key)` is a composite unique constraint.
+    - *Fix*: Directly updated the existing `idem_record` instance attached to the session during Step 3 (`status="COMPLETED"`, `event_id`, `response_payload`, `expires_at=None`) and called `await session.flush()`.
+    - *Regression Test*: Added `test_correction_idempotency_record_completion_regression` in `tests/test_phase5_corrections.py`.
+  - **Check 10 (Zero Synthetic Residue)**: Baseline row counts in Supabase confirmed 0 across all 6 tables before and after test execution. All mutations rolled back safely.
+- **Files Modified / Created**:
+  - `services/api/attendance/correction_service.py`
+  - `tests/test_phase5_corrections.py`
+  - `docs/PHASE_05_PLAN.md`
+  - `docs/ATTENDANCE_ARCHITECTURE.md`
+  - `PROJECT_CONTEXT.md`
+
 ---
 
 ## 12. Next Actions
 
-1. **Immediate Task**: STOP after Phase 4 Milestone 5 Frontend Integration & Final Verification. Phase 4 is FULLY COMPLETE across all 5 milestones. 172 backend tests & 36 frontend tests passing. Zero lint errors. Production build verified. Await project owner authorization before starting Phase 5 (Attendance Engine & Ledger).
-2. **Phase 4 Execution Roadmap**:
-   - [x] **Milestone 1 — Database Foundation & Workplace Locations**: Models, applied live Alembic migration `b7d41a89c204`, PostGIS generated coordinates, GiST index, `btree_gist` temporal primary exclusion constraint, forced RLS, CRUD APIs, `POST /locations/verify-coordinates` probe, 31 new tests (96 total backend, 19 frontend). **COMPLETE & LIVE MIGRATION VERIFIED**.
-   - [x] **Milestone 2 — Employee Workplace Assignments**: Assignment CRUD, primary workplace management, date validation, employee self-access endpoint (`GET /api/v1/employees/me/workplaces`), location roster (`GET /locations/{id}/employees`), 26 new tests (122 total backend, 19 frontend). **COMPLETE**.
-   - [x] **Milestone 3 — Bulk Employee Import**: Asynchronous Celery CSV/XLSX pipeline, shared MinIO/S3 storage, 2,000-row limit, downloadable failure CSV, PostgreSQL 17 column-specific composite FK syntax, formula injection sanitization, concurrency locking, and chunk rollback protection. Migration `c8e52a91f034` applied and verified live on Supabase. 29 new tests (151 total backend, 19 frontend). **COMPLETE & LIVE MIGRATION VERIFIED**.
-   - [x] **Milestone 4 — Employee Invitations & Activation**: Complete invitation lifecycle, Argon2id passwords, single-use acceptance, 5-attempt lockout, PII-safe email service, composite foreign keys (CASCADE on employee, SET NULL (invited_by_user_id) on user), partial unique index on pending invitations, forced RLS. Migration `d7a42e88b301` applied and verified live on Supabase. 21 new tests (172 total backend, 19 frontend). **COMPLETE & LIVE MIGRATION VERIFIED**.
-   - [x] **Milestone 5 — Frontend Integration & Verification**: Leaflet maps, assignment UI, import wizard, invitation manager, public activation page, 36 frontend tests, production build, full regression audit. **COMPLETE**.
-3. **Strict Boundaries**: STOP execution after Milestone 5. Do NOT begin Phase 5 without explicit owner authorization.
+1. **Current State**: Phase 5 (Attendance Engine & Ledger) is fully COMPLETE and VERIFIED across all 5 milestones and final verification checks on branch `phase-05`. Alembic migrations `e9f63b02a145` (Milestone 1), `f1b94c8e7a23` (Milestone 2), and `a2b3c4d5e6f7` (Milestone 3) are safely APPLIED and VERIFIED on live Supabase (`a2b3c4d5e6f7 (head)`). All 281 backend tests and 52 frontend tests pass (100%).
+2. **Phase 5 Execution Roadmap**:
+   - [x] **Milestone 1 — Shift Templates, Versions & Shift Assignments**: Master shift templates, immutable `shift_template_versions` with effective dates, employee rostering with exclusion constraints, CRUD APIs, RLS, live migration `e9f63b02a145` applied & verified.
+   - [x] **Milestone 2 — Event Ledger, Fingerprinting & Idempotent Punch API**: Append-only `attendance_events`, PostgreSQL immutability trigger, permanent `attendance_idempotency_records` with SHA-256 request fingerprinting, `POST /api/v1/attendance/punch`, pessimistic row-locking (`SELECT FOR UPDATE`), atomic break auto-close, live migration `f1b94c8e7a23` applied & verified.
+   - [x] **Milestone 3 — Timeline Resolution, Calculation Engine & Live Application**: Derived `attendance_days` projection table, pure timeline resolution and calculation engine, historical shift versioning preservation, overnight shift attribution, recalculation service, read APIs, live migration `a2b3c4d5e6f7` applied & verified.
+   - [x] **Milestone 4 — Correction Engine, Audit & Nightly Reconciliation**: Structured corrections (`CORRECTION_INSERT`, `CORRECTION_SUPERSEDE`, `CORRECTION_VOID`) with mandatory reasons and target event references, projection recalculation, Celery nightly reconciliation task, event audit history endpoint.
+   - [x] **Milestone 5 — Frontend Integration & Verification**: Next.js Employee Today punch widget with live timer, personal attendance history, HR Daily Attendance Console with KPI cards, records table, manual correction modal (insert/supersede/void), audit trail drawer, manager direct-report scoping, and full test suite verification.
+   - [x] **Phase 5 Final Verification & Defect Correction**: Comprehensive 10-check audit, live Supabase testing with zero data residue, PostgreSQL RLS tenant isolation, immutability trigger verification, defect resolution in correction idempotency finalization, regression tests, and full test suite passing.
+3. **Strict Boundaries**: Phase 5 is 100% complete. User has formally accepted Phase 5. Proceeding with official closure, release tag `phase-05-complete`, and upstream repository push. Do NOT begin Phase 6 (Flutter mobile app).

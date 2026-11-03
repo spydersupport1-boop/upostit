@@ -898,3 +898,338 @@ export const invitationApi = {
     }),
 };
 
+// =============================================================================
+// Phase 5: Attendance Engine, Shifts & Correction DTOs & Endpoints
+// =============================================================================
+
+export interface ShiftVersionDto {
+  id: string;
+  shift_template_id: string;
+  version_number: number;
+  version_effective_from: string;
+  start_time: string;
+  end_time: string;
+  grace_period_minutes: number;
+  early_exit_grace_minutes: number;
+  early_arrival_allowance_minutes: number;
+  late_departure_allowance_minutes: number;
+  half_day_threshold_minutes: number;
+  full_day_threshold_minutes: number;
+  break_duration_minutes: number;
+  is_overnight: boolean;
+  is_flexible: boolean;
+  weekly_off_days: number[];
+  created_by_user_id?: string | null;
+  created_at: string;
+}
+
+export interface ShiftTemplateDto {
+  id: string;
+  tenant_id: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  is_active: boolean;
+  current_version_number: number;
+  current_version?: ShiftVersionDto | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShiftAssignmentDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  shift_template_id: string;
+  effective_from: string;
+  effective_to?: string | null;
+  shift_template?: ShiftTemplateDto | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AttendanceEventDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  event_type: "CHECK_IN" | "CHECK_OUT" | "BREAK_START" | "BREAK_END";
+  event_category: "STANDARD" | "CORRECTION_INSERT" | "CORRECTION_SUPERSEDE" | "CORRECTION_VOID";
+  supersedes_event_id?: string | null;
+  correction_reason?: string | null;
+  server_received_at: string;
+  device_reported_at?: string | null;
+  effective_at: string;
+  clock_drift_seconds?: number | string | null;
+  source: string;
+  device_id?: string | null;
+  timestamp_verification_status: string;
+  review_status: string;
+  idempotency_key: string;
+  location_id?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  accuracy_meters?: number | string | null;
+  actor_user_id?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PunchRequestDto {
+  employee_id: string;
+  event_type: "CHECK_IN" | "CHECK_OUT" | "BREAK_START" | "BREAK_END";
+  client_timestamp?: string;
+  idempotency_key: string;
+  location_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy_meters?: number | null;
+}
+
+export interface PunchResponseDto {
+  event: AttendanceEventDto;
+  additional_events: AttendanceEventDto[];
+  idempotent_replay: boolean;
+}
+
+export interface AttendanceEventListResponseDto {
+  items: AttendanceEventDto[];
+  total: number;
+  next_cursor?: string | null;
+}
+
+export interface AttendanceDayDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  employee_name?: string | null;
+  employee_number?: string | null;
+  attendance_date: string;
+  shift_template_id?: string | null;
+  shift_version_id?: string | null;
+  shift_name?: string | null;
+  first_check_in?: string | null;
+  last_check_out?: string | null;
+  total_working_minutes: number;
+  total_break_minutes: number;
+  net_working_minutes: number;
+  actual_late_minutes: number;
+  late_arrival_minutes: number;
+  actual_early_minutes: number;
+  early_departure_minutes: number;
+  overtime_minutes: number;
+  status: "PRESENT" | "LATE" | "HALF_DAY" | "ABSENT" | "INCOMPLETE" | "WEEK_OFF" | "ON_LEAVE" | "HOLIDAY" | "PENDING_REVIEW";
+  calculation_status: "CALCULATED" | "INCOMPLETE" | "FLAGGED";
+  calculation_version: number;
+  is_incomplete: boolean;
+  missing_punch: boolean;
+  source_event_ids: string[];
+  metadata?: Record<string, unknown>;
+  last_calculated_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AttendanceDayListResponseDto {
+  items: AttendanceDayDto[];
+  total: number;
+  next_cursor?: string | null;
+}
+
+export type AttendanceCorrectionType = "CORRECTION_INSERT" | "CORRECTION_SUPERSEDE" | "CORRECTION_VOID";
+
+export interface AttendanceCorrectionCreateRequestDto {
+  employee_id: string;
+  correction_type: AttendanceCorrectionType;
+  event_type?: "CHECK_IN" | "CHECK_OUT" | "BREAK_START" | "BREAK_END";
+  effective_at?: string | null;
+  supersedes_event_id?: string | null;
+  correction_reason: string;
+  idempotency_key: string;
+  location_id?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AttendanceCorrectionResponseDto {
+  correction_event: AttendanceEventDto;
+  affected_attendance_dates: string[];
+  recalculated_days: AttendanceDayDto[];
+  idempotent_replay: boolean;
+}
+
+export interface AttendanceEventAuditDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  event_type: string;
+  event_category: string;
+  effective_at: string;
+  server_received_at: string;
+  supersedes_event_id?: string | null;
+  correction_reason?: string | null;
+  actor_user_id?: string | null;
+  source: string;
+  review_status: string;
+  timestamp_verification_status: string;
+  is_active: boolean;
+  superseded_by_event_id?: string | null;
+  voided_by_event_id?: string | null;
+  created_at: string;
+}
+
+export interface AttendanceEventAuditListResponseDto {
+  items: AttendanceEventAuditDto[];
+  total: number;
+}
+
+export interface AttendanceCorrectionListResponseDto {
+  items: AttendanceEventDto[];
+  total: number;
+  next_cursor?: string | null;
+}
+
+export interface ReconciliationRequestDto {
+  target_date?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  employee_id?: string | null;
+  batch_size?: number;
+}
+
+export interface ReconciliationResponseDto {
+  status: string;
+  tenant_id: string;
+  target_dates: string[];
+  total_candidates: number;
+  recalculated_count: number;
+  failed_count: number;
+  errors: string[];
+}
+
+export const shiftApi = {
+  getShifts: (
+    params?: { search?: string; is_active?: boolean; limit?: number },
+    token?: string
+  ) =>
+    apiFetch<ShiftTemplateDto[]>("/shifts", {
+      token,
+      params,
+    }),
+
+  getShiftById: (id: string, token?: string) =>
+    apiFetch<ShiftTemplateDto>(`/shifts/${id}`, {
+      token,
+    }),
+
+  getAssignments: (
+    params?: {
+      employee_id?: string;
+      shift_template_id?: string;
+      active_on_date?: string;
+      limit?: number;
+    },
+    token?: string
+  ) =>
+    apiFetch<ShiftAssignmentDto[]>("/shifts/assignments", {
+      token,
+      params,
+    }),
+};
+
+export const attendanceApi = {
+  // Daily attendance summaries
+  getDays: (
+    params?: {
+      employee_id?: string;
+      start_date?: string;
+      end_date?: string;
+      attendance_status?: string;
+      limit?: number;
+      cursor?: string;
+    },
+    token?: string
+  ) =>
+    apiFetch<AttendanceDayListResponseDto>("/attendance/days", {
+      token,
+      params,
+    }),
+
+  getDay: (employeeId: string, attendanceDate: string, token?: string) =>
+    apiFetch<AttendanceDayDto>(`/attendance/days/${employeeId}/${attendanceDate}`, {
+      token,
+    }),
+
+  recalculate: (employeeId: string, attendanceDate: string, token?: string) =>
+    apiFetch<AttendanceDayDto>("/attendance/recalculate", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: employeeId, attendance_date: attendanceDate }),
+      token,
+    }),
+
+  // Employee punch action
+  punch: (data: PunchRequestDto, token?: string) =>
+    apiFetch<PunchResponseDto>("/attendance/punch", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  // Raw attendance events
+  getEvents: (
+    params?: {
+      employee_id?: string;
+      event_type?: string;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+      cursor?: string;
+    },
+    token?: string
+  ) =>
+    apiFetch<AttendanceEventListResponseDto>("/attendance/events", {
+      token,
+      params,
+    }),
+
+  getEventById: (eventId: string, token?: string) =>
+    apiFetch<AttendanceEventDto>(`/attendance/events/${eventId}`, {
+      token,
+    }),
+
+  // Administrative corrections & audit
+  createCorrection: (data: AttendanceCorrectionCreateRequestDto, token?: string) =>
+    apiFetch<AttendanceCorrectionResponseDto>("/attendance/corrections", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getCorrections: (
+    params?: {
+      employee_id?: string;
+      correction_type?: string;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+      cursor?: string;
+    },
+    token?: string
+  ) =>
+    apiFetch<AttendanceCorrectionListResponseDto>("/attendance/corrections", {
+      token,
+      params,
+    }),
+
+  getDayEvents: (recordId: string, token?: string) =>
+    apiFetch<AttendanceEventAuditListResponseDto>(`/attendance/records/${recordId}/events`, {
+      token,
+    }),
+
+  // Batch reconciliation
+  reconcile: (data: ReconciliationRequestDto, token?: string) =>
+    apiFetch<ReconciliationResponseDto>("/attendance/reconcile", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+};
+

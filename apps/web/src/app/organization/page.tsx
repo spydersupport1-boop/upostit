@@ -716,6 +716,9 @@ export default function OrganizationPage() {
             <span className="badge">Employee Self-Service</span>
           </div>
           <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+            <Link href="/attendance" className="btn btn-secondary btn-sm">
+              ⏱️ My Attendance
+            </Link>
             <span className="badge badge-role-employee">Role: Employee</span>
             <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
               {user?.full_name} ({tenant?.name})
@@ -841,6 +844,9 @@ export default function OrganizationPage() {
           <span className="badge">Organization</span>
         </div>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          <Link href="/attendance" className="btn btn-secondary btn-sm">
+            ⏱️ Attendance Console
+          </Link>
           <span className={`badge badge-role-${user?.role || "admin"}`}>
             Role: {user?.role ? user.role.toUpperCase() : "AUTHENTICATED"}
           </span>

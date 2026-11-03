@@ -34,6 +34,13 @@ class Permission(StrEnum):
     VIEW_LOCATIONS = "view_locations"
     IMPORT_EMPLOYEES = "import_employees"
     INVITE_EMPLOYEES = "invite_employees"
+    # Phase 5 Attendance & Shifts Permissions
+    MANAGE_SHIFTS = "manage_shifts"
+    VIEW_SHIFTS = "view_shifts"
+    RECORD_PUNCH = "record_punch"
+    VIEW_ATTENDANCE = "view_attendance"
+    MANAGE_ATTENDANCE = "manage_attendance"
+    CORRECT_ATTENDANCE = "correct_attendance"
 
 
 # Role-to-Permissions Mapping (Deny by default)
@@ -54,6 +61,12 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_LOCATIONS,
         Permission.IMPORT_EMPLOYEES,
         Permission.INVITE_EMPLOYEES,
+        Permission.MANAGE_SHIFTS,
+        Permission.VIEW_SHIFTS,
+        Permission.RECORD_PUNCH,
+        Permission.VIEW_ATTENDANCE,
+        Permission.MANAGE_ATTENDANCE,
+        Permission.CORRECT_ATTENDANCE,
     },
     UserRole.ADMIN: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -71,6 +84,12 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_LOCATIONS,
         Permission.IMPORT_EMPLOYEES,
         Permission.INVITE_EMPLOYEES,
+        Permission.MANAGE_SHIFTS,
+        Permission.VIEW_SHIFTS,
+        Permission.RECORD_PUNCH,
+        Permission.VIEW_ATTENDANCE,
+        Permission.MANAGE_ATTENDANCE,
+        Permission.CORRECT_ATTENDANCE,
     },
     UserRole.HR: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -84,6 +103,12 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_LOCATIONS,
         Permission.IMPORT_EMPLOYEES,
         Permission.INVITE_EMPLOYEES,
+        Permission.MANAGE_SHIFTS,
+        Permission.VIEW_SHIFTS,
+        Permission.RECORD_PUNCH,
+        Permission.VIEW_ATTENDANCE,
+        Permission.MANAGE_ATTENDANCE,
+        Permission.CORRECT_ATTENDANCE,
     },
     UserRole.MANAGER: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -91,10 +116,17 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_ORGANIZATION,
         Permission.VIEW_EMPLOYEES,
         Permission.VIEW_LOCATIONS,
+        Permission.VIEW_SHIFTS,
+        Permission.RECORD_PUNCH,
+        Permission.VIEW_ATTENDANCE,
+        Permission.CORRECT_ATTENDANCE,
     },
     UserRole.EMPLOYEE: {
         Permission.VIEW_OWN_PROFILE,
         Permission.VIEW_ORGANIZATION,
+        Permission.VIEW_SHIFTS,
+        Permission.RECORD_PUNCH,
+        Permission.VIEW_ATTENDANCE,
     },
 }
 

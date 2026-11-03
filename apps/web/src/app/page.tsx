@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -7,10 +8,15 @@ export default function Home() {
         <div className="logo-badge">
           <div className="logo-dot" />
           <span>Attendance SaaS</span>
-          <span className="badge">Phase 1</span>
+          <span className="badge">Phase 5</span>
         </div>
-        <div>
-          <span className="badge badge-green">Monorepo Active</span>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+          <Link href="/organization" className="btn btn-secondary btn-sm">
+            🏢 Organization
+          </Link>
+          <Link href="/attendance" className="btn btn-primary btn-sm">
+            ⏱️ Attendance Console
+          </Link>
         </div>
       </nav>
 

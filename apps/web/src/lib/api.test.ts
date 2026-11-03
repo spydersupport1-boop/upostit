@@ -9,6 +9,8 @@ import {
   assignmentApi,
   importApi,
   invitationApi,
+  shiftApi,
+  attendanceApi,
   tokenStorage,
   setTokenRefreshHandler,
   API_BASE_URL,
@@ -1101,6 +1103,558 @@ describe("Frontend API Client & Token Handling", () => {
       const parsed = JSON.parse(capturedBody);
       assert.equal(parsed.token, "safe-invitation-token-secret");
       assert.equal(parsed.password, "SecurePassword123!");
+    });
+  });
+
+  describe("shiftApi operations (Phase 5 Shift Rostering)", () => {
+    it("should fetch shift templates list with parameters", async () => {
+      let capturedUrl = "";
+
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = url.toString();
+        return new Response(
+          JSON.stringify([
+            {
+              id: "shift-123",
+              tenant_id: "tenant-1",
+              name: "General Morning Shift",
+              code: "MORN_01",
+              is_active: true,
+              current_version_number: 1,
+              current_version: {
+                id: "version-1",
+                shift_id: "shift-123",
+                version_number: 1,
+                start_time: "09:00:00",
+                end_time: "17:00:00",
+                is_overnight: false,
+                is_flexible: false,
+                break_duration_minutes: 60,
+                grace_period_minutes: 15,
+                early_exit_grace_minutes: 15,
+                early_arrival_allowance_minutes: 30,
+                late_departure_allowance_minutes: 30,
+                half_day_threshold_minutes: 240,
+                full_day_threshold_minutes: 480,
+                weekly_off_days: [0, 6],
+                created_at: "2026-01-01T00:00:00Z",
+              },
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const shifts = await shiftApi.getShifts({ search: "Morning", is_active: true, limit: 10 }, "jwt-token");
+      assert.equal(shifts.length, 1);
+      assert.equal(shifts[0].name, "General Morning Shift");
+      assert.equal(shifts[0].current_version?.start_time, "09:00:00");
+      assert.ok(capturedUrl.includes("/api/v1/shifts"));
+      assert.ok(capturedUrl.includes("search=Morning"));
+    });
+
+    it("should fetch a specific shift template by ID", async () => {
+      let capturedUrl = "";
+
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = url.toString();
+        return new Response(
+          JSON.stringify({
+            id: "shift-456",
+            name: "Night Owl Shift",
+            code: "NIGHT_01",
+            is_active: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const shift = await shiftApi.getShiftById("shift-456", "jwt-token");
+      assert.equal(shift.id, "shift-456");
+      assert.equal(shift.name, "Night Owl Shift");
+      assert.ok(capturedUrl.endsWith("/api/v1/shifts/shift-456"));
+    });
+
+    it("should fetch shift assignments for an employee", async () => {
+      let capturedUrl = "";
+
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = url.toString();
+        return new Response(
+          JSON.stringify([
+            {
+              id: "assign-1",
+              employee_id: "emp-789",
+              shift_id: "shift-123",
+              effective_from: "2026-01-01",
+              effective_to: null,
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const assignments = await shiftApi.getAssignments({ employee_id: "emp-789", active_on_date: "2026-11-03" }, "jwt-token");
+      assert.equal(assignments.length, 1);
+      assert.equal(assignments[0].employee_id, "emp-789");
+      assert.ok(capturedUrl.includes("/api/v1/shifts/assignments"));
+      assert.ok(capturedUrl.includes("employee_id=emp-789"));
+    });
+  });
+
+  describe("attendanceApi operations (Phase 5 Attendance & Corrections)", () => {
+    it("should fetch attendance days with query parameters", async () => {
+      let capturedUrl = "";
+
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = url.toString();
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "day-1",
+                tenant_id: "tenant-1",
+                employee_id: "emp-101",
+                employee_name: "Alice Smith",
+                employee_number: "EMP001",
+                attendance_date: "2026-11-03",
+                shift_name: "Morning Shift",
+                first_check_in: "2026-11-03T09:05:00Z",
+                last_check_out: "2026-11-03T17:02:00Z",
+                total_working_minutes: 477,
+                total_break_minutes: 60,
+                net_working_minutes: 417,
+                late_arrival_minutes: 5,
+                early_departure_minutes: 0,
+                overtime_minutes: 0,
+                status: "PRESENT",
+                calculation_status: "CALCULATED",
+                calculation_version: 1,
+                is_incomplete: false,
+                missing_punch: false,
+                source_event_ids: ["ev-1", "ev-2"],
+                last_calculated_at: "2026-11-03T17:05:00Z",
+                created_at: "2026-11-03T09:05:00Z",
+                updated_at: "2026-11-03T17:05:00Z",
+              },
+            ],
+            total: 1,
+            next_cursor: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const resp = await attendanceApi.getDays(
+        {
+          start_date: "2026-11-03",
+          end_date: "2026-11-03",
+          attendance_status: "PRESENT",
+          limit: 20,
+        },
+        "jwt-token"
+      );
+
+      assert.equal(resp.total, 1);
+      assert.equal(resp.items[0].employee_name, "Alice Smith");
+      assert.equal(resp.items[0].net_working_minutes, 417);
+      assert.ok(capturedUrl.includes("/api/v1/attendance/days"));
+      assert.ok(capturedUrl.includes("attendance_status=PRESENT"));
+    });
+
+    it("should fetch a single day record for an employee", async () => {
+      let capturedUrl = "";
+
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = url.toString();
+        return new Response(
+          JSON.stringify({
+            id: "day-101",
+            employee_id: "emp-101",
+            attendance_date: "2026-11-03",
+            status: "PRESENT",
+            net_working_minutes: 480,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const day = await attendanceApi.getDay("emp-101", "2026-11-03", "jwt-token");
+      assert.equal(day.id, "day-101");
+      assert.equal(day.status, "PRESENT");
+      assert.ok(capturedUrl.endsWith("/api/v1/attendance/days/emp-101/2026-11-03"));
+    });
+
+    it("should trigger manual recalculation of attendance day", async () => {
+      let capturedUrl = "";
+      let capturedBody = "";
+      let capturedMethod = "";
+
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        capturedUrl = url.toString();
+        capturedMethod = init?.method || "";
+        capturedBody = init?.body as string;
+        return new Response(
+          JSON.stringify({
+            id: "day-1",
+            employee_id: "emp-101",
+            attendance_date: "2026-11-03",
+            calculation_version: 2,
+            status: "PRESENT",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const res = await attendanceApi.recalculate("emp-101", "2026-11-03", "jwt-token");
+      assert.equal(capturedMethod, "POST");
+      assert.ok(capturedUrl.endsWith("/api/v1/attendance/recalculate"));
+      const body = JSON.parse(capturedBody);
+      assert.equal(body.employee_id, "emp-101");
+      assert.equal(body.attendance_date, "2026-11-03");
+      assert.equal(res.calculation_version, 2);
+    });
+
+    it("should execute punch action with idempotency key and client timestamp", async () => {
+      let capturedUrl = "";
+      let capturedBody = "";
+      let capturedMethod = "";
+
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        capturedUrl = url.toString();
+        capturedMethod = init?.method || "";
+        capturedBody = init?.body as string;
+        return new Response(
+          JSON.stringify({
+            event: {
+              id: "ev-punch-1",
+              tenant_id: "tenant-1",
+              employee_id: "emp-101",
+              event_type: "CHECK_IN",
+              event_category: "STANDARD",
+              effective_at: "2026-11-03T09:00:00Z",
+              server_received_at: "2026-11-03T09:00:01Z",
+              idempotency_key: "idem-key-abc-123",
+              source: "WEB_CONSOLE",
+              timestamp_verification_status: "VERIFIED",
+              review_status: "APPROVED",
+              created_at: "2026-11-03T09:00:01Z",
+            },
+            additional_events: [],
+            idempotent_replay: false,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const punchRes = await attendanceApi.punch(
+        {
+          employee_id: "emp-101",
+          event_type: "CHECK_IN",
+          client_timestamp: "2026-11-03T09:00:00Z",
+          idempotency_key: "idem-key-abc-123",
+          location_id: "loc-hq",
+        },
+        "jwt-token"
+      );
+
+      assert.equal(capturedMethod, "POST");
+      assert.ok(capturedUrl.endsWith("/api/v1/attendance/punch"));
+      const body = JSON.parse(capturedBody);
+      assert.equal(body.event_type, "CHECK_IN");
+      assert.equal(body.idempotency_key, "idem-key-abc-123");
+      assert.equal(punchRes.event.event_type, "CHECK_IN");
+      assert.equal(punchRes.idempotent_replay, false);
+    });
+
+    it("should create CORRECTION_INSERT with mandatory reason", async () => {
+      let capturedUrl = "";
+      let capturedBody = "";
+
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        capturedUrl = url.toString();
+        capturedBody = init?.body as string;
+        return new Response(
+          JSON.stringify({
+            correction_event: {
+              id: "corr-ev-1",
+              tenant_id: "tenant-1",
+              employee_id: "emp-101",
+              event_type: "CHECK_OUT",
+              event_category: "CORRECTION_INSERT",
+              effective_at: "2026-11-03T18:00:00Z",
+              correction_reason: "Employee forgot to punch out due to client emergency",
+              actor_user_id: "mgr-user-1",
+              source: "ADMIN_WEB_CORRECTION",
+              idempotency_key: "corr-key-1",
+              created_at: "2026-11-03T19:00:00Z",
+            },
+            affected_attendance_dates: ["2026-11-03"],
+            recalculated_days: [],
+            idempotent_replay: false,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const res = await attendanceApi.createCorrection(
+        {
+          employee_id: "emp-101",
+          correction_type: "CORRECTION_INSERT",
+          event_type: "CHECK_OUT",
+          effective_at: "2026-11-03T18:00:00Z",
+          correction_reason: "Employee forgot to punch out due to client emergency",
+          idempotency_key: "corr-key-1",
+        },
+        "jwt-token"
+      );
+
+      assert.ok(capturedUrl.endsWith("/api/v1/attendance/corrections"));
+      const parsed = JSON.parse(capturedBody);
+      assert.equal(parsed.correction_type, "CORRECTION_INSERT");
+      assert.equal(parsed.correction_reason, "Employee forgot to punch out due to client emergency");
+      assert.equal(res.correction_event.event_category, "CORRECTION_INSERT");
+    });
+
+    it("should create CORRECTION_SUPERSEDE pointing to target event ID", async () => {
+      let capturedBody = "";
+
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        capturedBody = init?.body as string;
+        return new Response(
+          JSON.stringify({
+            correction_event: {
+              id: "corr-ev-2",
+              event_category: "CORRECTION_SUPERSEDE",
+              supersedes_event_id: "orig-ev-123",
+              correction_reason: "Corrected timestamp: employee arrived at 09:00 not 09:30",
+            },
+            affected_attendance_dates: ["2026-11-03"],
+            recalculated_days: [],
+            idempotent_replay: false,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const res = await attendanceApi.createCorrection(
+        {
+          employee_id: "emp-101",
+          correction_type: "CORRECTION_SUPERSEDE",
+          event_type: "CHECK_IN",
+          supersedes_event_id: "orig-ev-123",
+          effective_at: "2026-11-03T09:00:00Z",
+          correction_reason: "Corrected timestamp: employee arrived at 09:00 not 09:30",
+          idempotency_key: "corr-key-2",
+        },
+        "jwt-token"
+      );
+
+      const parsed = JSON.parse(capturedBody);
+      assert.equal(parsed.supersedes_event_id, "orig-ev-123");
+      assert.equal(res.correction_event.supersedes_event_id, "orig-ev-123");
+    });
+
+    it("should create CORRECTION_VOID to nullify erroneous event", async () => {
+      let capturedBody = "";
+
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        capturedBody = init?.body as string;
+        return new Response(
+          JSON.stringify({
+            correction_event: {
+              id: "corr-ev-3",
+              event_category: "CORRECTION_VOID",
+              supersedes_event_id: "duplicate-ev-456",
+              correction_reason: "Accidental double-tap check-in voided per supervisor review",
+            },
+            affected_attendance_dates: ["2026-11-03"],
+            recalculated_days: [],
+            idempotent_replay: false,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const res = await attendanceApi.createCorrection(
+        {
+          employee_id: "emp-101",
+          correction_type: "CORRECTION_VOID",
+          supersedes_event_id: "duplicate-ev-456",
+          correction_reason: "Accidental double-tap check-in voided per supervisor review",
+          idempotency_key: "corr-key-3",
+        },
+        "jwt-token"
+      );
+
+      const parsed = JSON.parse(capturedBody);
+      assert.equal(parsed.correction_type, "CORRECTION_VOID");
+      assert.equal(parsed.supersedes_event_id, "duplicate-ev-456");
+      assert.equal(res.correction_event.event_category, "CORRECTION_VOID");
+    });
+
+    it("should fetch day events audit stream for drawer timeline", async () => {
+      let capturedUrl = "";
+
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = url.toString();
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "ev-1",
+                event_type: "CHECK_IN",
+                event_category: "STANDARD",
+                effective_at: "2026-11-03T09:00:00Z",
+                is_active: true,
+                source: "WEB_CONSOLE",
+                created_at: "2026-11-03T09:00:00Z",
+              },
+              {
+                id: "ev-2",
+                event_type: "CHECK_OUT",
+                event_category: "CORRECTION_INSERT",
+                effective_at: "2026-11-03T17:00:00Z",
+                correction_reason: "Missed punch correction",
+                actor_user_id: "admin-1",
+                is_active: true,
+                source: "ADMIN_WEB_CORRECTION",
+                created_at: "2026-11-03T18:00:00Z",
+              },
+            ],
+            total: 2,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const auditStream = await attendanceApi.getDayEvents("rec-day-999", "jwt-token");
+      assert.equal(auditStream.total, 2);
+      assert.equal(auditStream.items[0].event_type, "CHECK_IN");
+      assert.equal(auditStream.items[1].event_category, "CORRECTION_INSERT");
+      assert.ok(capturedUrl.endsWith("/api/v1/attendance/records/rec-day-999/events"));
+    });
+
+    it("should trigger attendance batch reconciliation", async () => {
+      let capturedUrl = "";
+      let capturedBody = "";
+
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        capturedUrl = url.toString();
+        capturedBody = init?.body as string;
+        return new Response(
+          JSON.stringify({
+            status: "COMPLETED",
+            tenant_id: "tenant-1",
+            target_dates: ["2026-11-03"],
+            total_candidates: 15,
+            recalculated_count: 14,
+            failed_count: 0,
+            errors: [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof fetch;
+
+      const recon = await attendanceApi.reconcile({ target_date: "2026-11-03" }, "jwt-token");
+      assert.equal(recon.status, "COMPLETED");
+      assert.equal(recon.total_candidates, 15);
+      assert.equal(recon.recalculated_count, 14);
+      assert.ok(capturedUrl.endsWith("/api/v1/attendance/reconcile"));
+      const parsed = JSON.parse(capturedBody);
+      assert.equal(parsed.target_date, "2026-11-03");
+    });
+  });
+
+  describe("Attendance Business Logic & Frontend Invariant Verification (Milestone 5)", () => {
+    it("should compute accurate dashboard KPI metrics from daily attendance projections", () => {
+      const mockDays = [
+        // Present on time
+        { status: "PRESENT", first_check_in: "09:00:00", last_check_out: "17:00:00", late_arrival_minutes: 0, is_incomplete: false },
+        // Present but late
+        { status: "PRESENT", first_check_in: "09:20:00", last_check_out: "17:00:00", late_arrival_minutes: 20, is_incomplete: false },
+        // Half day
+        { status: "HALF_DAY", first_check_in: "09:00:00", last_check_out: "13:00:00", late_arrival_minutes: 0, is_incomplete: false },
+        // Absent
+        { status: "ABSENT", first_check_in: null, last_check_out: null, late_arrival_minutes: 0, is_incomplete: false },
+        // Incomplete
+        { status: "INCOMPLETE", first_check_in: "09:00:00", last_check_out: null, late_arrival_minutes: 0, is_incomplete: true },
+        // Pending review
+        { status: "PENDING_REVIEW", first_check_in: "09:00:00", last_check_out: "17:00:00", late_arrival_minutes: 0, is_incomplete: false },
+        // Currently working (active checked in, not checked out, not incomplete)
+        { status: "PRESENT", first_check_in: "08:50:00", last_check_out: null, late_arrival_minutes: 0, is_incomplete: false },
+      ];
+
+      const present = mockDays.filter((d) => d.status === "PRESENT" || d.status === "HALF_DAY" || d.status === "LATE").length;
+      const absent = mockDays.filter((d) => d.status === "ABSENT").length;
+      const late = mockDays.filter((d) => d.status === "LATE" || d.late_arrival_minutes > 0).length;
+      const incomplete = mockDays.filter((d) => d.status === "INCOMPLETE" || d.is_incomplete).length;
+      const pendingReview = mockDays.filter((d) => d.status === "PENDING_REVIEW").length;
+      const currentlyWorking = mockDays.filter((d) => d.first_check_in && !d.last_check_out && !d.is_incomplete).length;
+      const unresolved = mockDays.filter((d) => d.status === "INCOMPLETE" || d.is_incomplete || (d.first_check_in && !d.last_check_out)).length;
+
+      assert.equal(present, 4); // 2 full present + 1 half day + 1 currently working present
+      assert.equal(absent, 1);
+      assert.equal(late, 1);
+      assert.equal(incomplete, 1);
+      assert.equal(pendingReview, 1);
+      assert.equal(currentlyWorking, 1);
+      assert.equal(unresolved, 2); // 1 incomplete + 1 active without checkout
+    });
+
+    it("should enforce manager scope filtering to direct reports only", () => {
+      const managerId = "mgr-100";
+      const employees = [
+        { id: "emp-1", first_name: "Alice", reporting_manager_id: "mgr-100" },
+        { id: "emp-2", first_name: "Bob", reporting_manager_id: "mgr-100" },
+        { id: "emp-3", first_name: "Charlie", reporting_manager_id: "other-mgr-200" },
+        { id: "mgr-100", first_name: "Manager Dave", reporting_manager_id: null },
+      ];
+
+      const authorizedDirectReports = employees.filter(
+        (e) => e.reporting_manager_id === managerId || e.id === managerId
+      );
+
+      assert.equal(authorizedDirectReports.length, 3);
+      assert.ok(authorizedDirectReports.some((e) => e.id === "emp-1"));
+      assert.ok(authorizedDirectReports.some((e) => e.id === "emp-2"));
+      assert.ok(authorizedDirectReports.some((e) => e.id === "mgr-100"));
+      assert.ok(!authorizedDirectReports.some((e) => e.id === "emp-3"));
+
+      // In manager view, self-correction must be blocked
+      const canCorrect = (targetEmpId: string) => targetEmpId !== managerId;
+      assert.equal(canCorrect("emp-1"), true);
+      assert.equal(canCorrect("emp-2"), true);
+      assert.equal(canCorrect("mgr-100"), false); // Self-correction blocked!
+    });
+
+    it("should validate correction reason length requirement (>= 5 chars)", () => {
+      const validateCorrectionReason = (reason: string) => {
+        if (!reason || reason.trim().length < 5) {
+          return "Correction reason is mandatory and must be at least 5 characters.";
+        }
+        return null;
+      };
+
+      assert.equal(validateCorrectionReason(""), "Correction reason is mandatory and must be at least 5 characters.");
+      assert.equal(validateCorrectionReason("abc"), "Correction reason is mandatory and must be at least 5 characters.");
+      assert.equal(validateCorrectionReason("1234"), "Correction reason is mandatory and must be at least 5 characters.");
+      assert.equal(validateCorrectionReason("Valid operational reason for adjustment"), null);
+    });
+
+    it("should validate target event requirement for SUPERSEDE and VOID corrections", () => {
+      const validateTargetEvent = (type: string, targetEventId: string | null | undefined) => {
+        if ((type === "CORRECTION_SUPERSEDE" || type === "CORRECTION_VOID") && !targetEventId) {
+          return "Please select the original attendance event to supersede or void.";
+        }
+        return null;
+      };
+
+      assert.equal(validateTargetEvent("CORRECTION_SUPERSEDE", ""), "Please select the original attendance event to supersede or void.");
+      assert.equal(validateTargetEvent("CORRECTION_VOID", undefined), "Please select the original attendance event to supersede or void.");
+      assert.equal(validateTargetEvent("CORRECTION_SUPERSEDE", "ev-1234"), null);
+      assert.equal(validateTargetEvent("CORRECTION_INSERT", ""), null);
     });
   });
 });

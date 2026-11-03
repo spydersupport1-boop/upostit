@@ -7,6 +7,10 @@ from fastapi import APIRouter, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from services.api.attendance.routes import (
+    attendance_router,
+    shifts_router,
+)
 from services.api.auth.routes import router as auth_router
 from services.api.config import settings
 from services.api.database import check_database_connection, check_postgis_capability
@@ -48,6 +52,8 @@ api_v1_router.include_router(designations_router)
 api_v1_router.include_router(employees_router)
 api_v1_router.include_router(invitations_router)
 api_v1_router.include_router(locations_router)
+api_v1_router.include_router(shifts_router)
+api_v1_router.include_router(attendance_router)
 
 app.include_router(api_v1_router)
 
