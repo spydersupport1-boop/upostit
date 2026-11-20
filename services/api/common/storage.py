@@ -62,7 +62,7 @@ class StorageService:
             )
             logger.info("Successfully uploaded %d bytes to S3 key %s", len(data), key)
         except (EndpointConnectionError, ClientError, Exception) as exc:
-            is_dev_or_test = settings.ENVIRONMENT.lower() in ("development", "test")
+            is_dev_or_test = settings.ENVIRONMENT.lower() in ("development", "test", "testing")
             if is_dev_or_test and settings.STORAGE_ALLOW_MEMORY_FALLBACK:
                 logger.warning(
                     "S3/MinIO endpoint unreachable (%s). Using local storage fallback for key: %s (DEVELOPMENT/TEST ONLY)",
@@ -79,7 +79,7 @@ class StorageService:
 
     def download_file(self, key: str) -> bytes:
         """Downloads file bytes from object storage or memory cache in dev/test."""
-        is_dev_or_test = settings.ENVIRONMENT.lower() in ("development", "test")
+        is_dev_or_test = settings.ENVIRONMENT.lower() in ("development", "test", "testing")
         if key in self._memory_store and is_dev_or_test and settings.STORAGE_ALLOW_MEMORY_FALLBACK:
             return self._memory_store[key]
 

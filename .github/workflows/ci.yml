@@ -43,7 +43,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/upostit_test
           SECRET_KEY: ci-test-secret-key-minimum-32-characters-required
-          ENVIRONMENT: testing
+          ENVIRONMENT: test
         run: |
           pytest tests/ -v
 
