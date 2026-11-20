@@ -344,6 +344,10 @@ class AttendanceEvent(Base):
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     accuracy_meters: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    applied_policy_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wifi_bssid: Mapped[str | None] = mapped_column(String(17), nullable=True)
+    wifi_ssid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_mock_location: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -356,6 +360,14 @@ class AttendanceEvent(Base):
     device_reported_timestamp = synonym("device_reported_at")
     effective_timestamp = synonym("effective_at")
     device_identifier = synonym("device_id")
+
+    @property
+    def risk_score(self) -> int:
+        return int((self.metadata_json or {}).get("risk_score", 0))
+
+    @property
+    def risk_category(self) -> str:
+        return str((self.metadata_json or {}).get("risk_category", "NORMAL"))
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -609,3 +621,251 @@ class AttendanceDay(Base):
     employee = relationship("Employee", foreign_keys=[employee_id])
     shift_template = relationship("ShiftTemplate", foreign_keys=[shift_template_id])
     shift_version = relationship("ShiftTemplateVersion", foreign_keys=[shift_version_id])
+
+
+class TenantAttendancePolicy(Base):
+    """Company Attendance Policy defining verification rules, methods, and fallbacks."""
+
+    __tablename__ = "tenant_attendance_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    default_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="MANUAL")
+    allowed_methods: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=lambda: ["MANUAL"]
+    )
+    required_methods: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=lambda: ["MANUAL"]
+    )
+    combination_rule: Mapped[str] = mapped_column(String(20), nullable=False, default="OR")
+    fallback_policy: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    gps_config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=lambda: {
+            "max_accuracy_meters": 100,
+            "max_location_age_seconds": 30,
+            "enforce_assigned_workplace": True,
+            "out_of_geofence_action": "REJECT",
+        },
+    )
+    wifi_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    biometric_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    face_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "version", name="uq_tenant_attendance_policy_tenant_version"),
+        UniqueConstraint("tenant_id", "id", name="uq_tenant_attendance_policy_tenant_id"),
+        CheckConstraint(
+            "default_mode IN ('MANUAL', 'GPS_ONLY', 'WIFI_ONLY', 'BIOMETRIC_ONLY', 'FACE_RECOGNITION', 'COMBINED')",
+            name="chk_tenant_attendance_policy_default_mode",
+        ),
+        CheckConstraint(
+            "combination_rule IN ('AND', 'OR', 'PRIMARY_WITH_FALLBACK')",
+            name="chk_tenant_attendance_policy_combination_rule",
+        ),
+        Index("ix_tenant_attendance_policies_tenant_active", "tenant_id", "is_active"),
+    )
+
+    # Relationships
+    tenant = relationship("Tenant", foreign_keys=[tenant_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+
+
+class AttendanceConflictIncident(Base):
+    """Represents an employee-submitted multi-event offline sequence conflict incident."""
+
+    __tablename__ = "attendance_conflict_incidents"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    bundle_id: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+    session_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PENDING_REVIEW",
+    )
+    primary_rejected_event: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+    dependent_events: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    total_events_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+    rejection_summary: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    employee_notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    assigned_reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
+    decision: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )
+    decision_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    reviewer_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    resolved_correction_event_ids: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_conflict_incidents_tenant_id"),
+        UniqueConstraint("tenant_id", "bundle_id", name="uq_conflict_incidents_tenant_bundle"),
+        ForeignKeyConstraint(
+            ["tenant_id", "employee_id"],
+            ["employees.tenant_id", "employees.id"],
+            name="fk_conflict_incidents_employee",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "user_id"],
+            ["users.tenant_id", "users.id"],
+            name="fk_conflict_incidents_user",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "assigned_reviewer_id"],
+            ["users.tenant_id", "users.id"],
+            name="fk_conflict_incidents_assigned_reviewer",
+            ondelete="SET NULL (assigned_reviewer_id)",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "reviewer_user_id"],
+            ["users.tenant_id", "users.id"],
+            name="fk_conflict_incidents_reviewer",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED')",
+            name="chk_conflict_incidents_status",
+        ),
+        CheckConstraint(
+            "decision IS NULL OR decision IN ('APPROVED', 'REJECTED')",
+            name="chk_conflict_incidents_decision",
+        ),
+        CheckConstraint(
+            "decision IS NULL OR length(trim(decision_reason)) >= 3",
+            name="chk_conflict_incidents_reason",
+        ),
+        CheckConstraint(
+            "(status = 'PENDING_REVIEW' AND decision IS NULL AND decided_at IS NULL AND reviewer_user_id IS NULL) OR "
+            "(status = 'APPROVED' AND decision = 'APPROVED' AND decided_at IS NOT NULL AND reviewer_user_id IS NOT NULL) OR "
+            "(status = 'REJECTED' AND decision = 'REJECTED' AND decided_at IS NOT NULL AND reviewer_user_id IS NOT NULL)",
+            name="chk_conflict_incidents_status_decision",
+        ),
+        Index("ix_conflict_incidents_tenant_status", "tenant_id", "status"),
+        Index("ix_conflict_incidents_tenant_employee", "tenant_id", "employee_id"),
+        Index("ix_conflict_incidents_tenant_submitted", "tenant_id", "submitted_at"),
+        Index("ix_conflict_incidents_tenant_decided", "tenant_id", "decided_at"),
+        Index(
+            "ix_conflict_incidents_tenant_assigned_reviewer", "tenant_id", "assigned_reviewer_id"
+        ),
+    )
+
+    # Relationships
+    tenant = relationship("Tenant", foreign_keys=[tenant_id])
+    employee = relationship("Employee", foreign_keys=[employee_id])
+    submitting_user = relationship("User", foreign_keys=[user_id])
+    assigned_reviewer = relationship("User", foreign_keys=[assigned_reviewer_id])
+    reviewer = relationship("User", foreign_keys=[reviewer_user_id])

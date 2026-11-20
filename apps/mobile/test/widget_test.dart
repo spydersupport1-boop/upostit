@@ -1,17 +1,57 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile/main.dart';
+import 'package:mobile/app.dart';
+import 'package:mobile/features/attendance/presentation/bloc/attendance_bloc.dart';
+import 'package:mobile/features/attendance/presentation/bloc/attendance_state.dart';
+import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
+import 'package:mobile/features/profile/presentation/bloc/profile_bloc.dart';
+import 'package:mobile/features/profile/presentation/bloc/profile_state.dart';
+import 'package:mocktail/mocktail.dart';
+
+class MockAuthBloc extends Mock implements AuthBloc {}
+
+class MockProfileBloc extends Mock implements ProfileBloc {}
+
+class MockAttendanceBloc extends Mock implements AttendanceBloc {}
 
 void main() {
-  testWidgets('Welcome screen renders with title and status badge', (WidgetTester tester) async {
-    await tester.pumpWidget(const AttendanceApp());
+  late MockAuthBloc mockAuthBloc;
+  late MockProfileBloc mockProfileBloc;
+  late MockAttendanceBloc mockAttendanceBloc;
 
-    // Verify app title renders
-    expect(find.text('Attendance SaaS'), findsOneWidget);
+  setUp(() {
+    mockAuthBloc = MockAuthBloc();
+    mockProfileBloc = MockProfileBloc();
+    mockAttendanceBloc = MockAttendanceBloc();
 
-    // Verify stage and phase badge
-    expect(find.text('Stage A • Phase 1 Foundation'), findsOneWidget);
+    when(() => mockAuthBloc.stream).thenAnswer((_) => const Stream.empty());
+    when(() => mockAuthBloc.state).thenReturn(const AuthInitial());
+    when(() => mockProfileBloc.stream).thenAnswer((_) => const Stream.empty());
+    when(() => mockProfileBloc.state).thenReturn(const ProfileInitial());
+    when(() => mockAttendanceBloc.stream)
+        .thenAnswer((_) => const Stream.empty());
+    when(() => mockAttendanceBloc.state).thenReturn(const AttendanceInitial());
+  });
 
-    // Verify action button exists
-    expect(find.text('System Foundation Ready'), findsOneWidget);
+  testWidgets('AttendanceApp boots with Material 3 theme and initial route',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MultiBlocProvider(
+        providers: [
+          BlocProvider<AuthBloc>.value(value: mockAuthBloc),
+          BlocProvider<ProfileBloc>.value(value: mockProfileBloc),
+          BlocProvider<AttendanceBloc>.value(value: mockAttendanceBloc),
+        ],
+        child: const AttendanceApp(),
+      ),
+    );
+
+    // Verify root MaterialApp mounts
+    expect(find.byType(MaterialApp), findsOneWidget);
+    // Verify splash screen branding renders on initial route
+    expect(find.text('UPOSTIT'), findsOneWidget);
+    expect(find.text('Workforce Attendance Platform'), findsOneWidget);
   });
 }

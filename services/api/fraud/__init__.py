@@ -1,0 +1,68 @@
+"""Fraud detection and prevention domain package."""
+
+from services.api.fraud.engine import (
+    DEFAULT_RULE_DEFINITIONS,
+    calculate_risk_score,
+    evaluate_and_persist_attendance_risk,
+    get_tenant_fraud_rules,
+    persist_fraud_flags,
+    seed_default_fraud_rules,
+)
+from services.api.fraud.models import FraudFlag, FraudRule
+from services.api.fraud.schemas import (
+    ClockDriftResult,
+    FraudEvidenceAssessment,
+    FraudFlagListResponse,
+    FraudFlagResponse,
+    FraudRuleCreateRequest,
+    FraudRuleListResponse,
+    FraudRuleResponse,
+    FraudRuleUpdateRequest,
+    FraudSignal,
+    FraudSignalSeverity,
+    FraudSignalType,
+    GpsEvidenceResult,
+    RiskCategory,
+    RiskScoreResult,
+    VelocityResult,
+)
+from services.api.fraud.service import (
+    calculate_punch_velocity,
+    evaluate_attendance_fraud_evidence,
+    evaluate_clock_drift,
+    evaluate_gps_evidence,
+    get_previous_punch_with_coordinates,
+    haversine_distance,
+)
+
+__all__ = [
+    "DEFAULT_RULE_DEFINITIONS",
+    "ClockDriftResult",
+    "FraudEvidenceAssessment",
+    "FraudFlag",
+    "FraudFlagListResponse",
+    "FraudFlagResponse",
+    "FraudRule",
+    "FraudRuleCreateRequest",
+    "FraudRuleListResponse",
+    "FraudRuleResponse",
+    "FraudRuleUpdateRequest",
+    "FraudSignal",
+    "FraudSignalSeverity",
+    "FraudSignalType",
+    "GpsEvidenceResult",
+    "RiskCategory",
+    "RiskScoreResult",
+    "VelocityResult",
+    "calculate_punch_velocity",
+    "calculate_risk_score",
+    "evaluate_and_persist_attendance_risk",
+    "evaluate_attendance_fraud_evidence",
+    "evaluate_clock_drift",
+    "evaluate_gps_evidence",
+    "get_previous_punch_with_coordinates",
+    "get_tenant_fraud_rules",
+    "haversine_distance",
+    "persist_fraud_flags",
+    "seed_default_fraud_rules",
+]

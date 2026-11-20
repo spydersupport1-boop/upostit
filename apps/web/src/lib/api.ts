@@ -1233,3 +1233,761 @@ export const attendanceApi = {
     }),
 };
 
+// =============================================================================
+// Offline Attendance Conflict Adjudication (Phase 8)
+// =============================================================================
+
+export interface ConflictIncidentEmployeeDetailDto {
+  id: string;
+  employee_code: string;
+  first_name: string;
+  last_name: string;
+  work_email: string;
+  department_name?: string | null;
+  reporting_manager_id?: string | null;
+}
+
+export interface SupervisorConflictQueueItemDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  employee_name: string;
+  employee_code: string;
+  department_name?: string | null;
+  bundle_id: string;
+  session_id?: string | null;
+  status: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | string;
+  total_events_count: number;
+  primary_event_type: string;
+  primary_device_reported_at: string;
+  rejection_summary?: string | null;
+  employee_notes?: string | null;
+  submitted_at: string;
+  decision?: "APPROVE" | "REJECT" | string | null;
+  decision_reason?: string | null;
+  reviewer_user_id?: string | null;
+  decided_at?: string | null;
+  resolved_correction_event_ids: string[];
+}
+
+export interface SupervisorConflictQueueListResponseDto {
+  items: SupervisorConflictQueueItemDto[];
+  total: number;
+  limit: number;
+  cursor?: string | null;
+  has_more: boolean;
+}
+
+export interface ConflictTelemetryEventDto {
+  local_id: string;
+  idempotency_key: string;
+  event_type: string;
+  device_reported_at: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy_meters?: number | null;
+  device_id_hash?: string | null;
+  device_model?: string | null;
+  os_version?: string | null;
+  is_mock_location?: boolean | null;
+  server_rejection_code?: number | null;
+  server_rejection_reason?: string | null;
+  location_id?: string | null;
+  wifi_ssid?: string | null;
+  wifi_bssid?: string | null;
+  [key: string]: unknown;
+}
+
+export interface AttendanceConflictIncidentDetailDto {
+  id: string;
+  tenant_id: string;
+  bundle_id: string;
+  session_id?: string | null;
+  status: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | string;
+  employee: ConflictIncidentEmployeeDetailDto;
+  primary_rejected_event: ConflictTelemetryEventDto;
+  dependent_events: ConflictTelemetryEventDto[];
+  total_events_count: number;
+  rejection_summary?: string | null;
+  employee_notes?: string | null;
+  submitted_at: string;
+  assigned_reviewer_id?: string | null;
+  decision?: "APPROVE" | "REJECT" | string | null;
+  decision_reason?: string | null;
+  reviewer_user_id?: string | null;
+  decided_at?: string | null;
+  resolved_correction_event_ids: string[];
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AttendanceConflictDecisionRequestDto {
+  action: "APPROVE" | "REJECT" | string;
+  reason: string;
+  override_location_id?: string | null;
+}
+
+export interface AttendanceConflictDecisionResponseDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  bundle_id: string;
+  status: string;
+  decision: string;
+  decision_reason: string;
+  reviewer_user_id: string;
+  decided_at: string;
+  resolved_correction_event_ids: string[];
+  affected_attendance_dates: string[];
+  recalculated_days_count: number;
+}
+
+export interface EmployeeConflictIncidentItemDto {
+  id: string;
+  bundle_id: string;
+  session_id?: string | null;
+  status: string;
+  total_events_count: number;
+  primary_event_type: string;
+  primary_event_timestamp: string;
+  rejection_summary?: string | null;
+  employee_notes?: string | null;
+  submitted_at: string;
+  decision?: string | null;
+  decision_reason?: string | null;
+  decided_at?: string | null;
+  resolved_events_count: number;
+}
+
+export interface EmployeeConflictIncidentListResponseDto {
+  items: EmployeeConflictIncidentItemDto[];
+  total: number;
+  limit: number;
+  cursor?: string | null;
+  has_more: boolean;
+}
+
+export const conflictApi = {
+  getSupervisorQueue: (
+    params?: {
+      status?: string;
+      employee_id?: string;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+      cursor?: string;
+    },
+    token?: string
+  ) =>
+    apiFetch<SupervisorConflictQueueListResponseDto>("/attendance/offline-conflicts", {
+      token,
+      params,
+    }),
+
+  getIncidentDetail: (incidentId: string, token?: string) =>
+    apiFetch<AttendanceConflictIncidentDetailDto>(`/attendance/offline-conflicts/${incidentId}`, {
+      token,
+    }),
+
+  adjudicateIncident: (
+    incidentId: string,
+    data: AttendanceConflictDecisionRequestDto,
+    token?: string
+  ) =>
+    apiFetch<AttendanceConflictDecisionResponseDto>(
+      `/attendance/offline-conflicts/${incidentId}/decision`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+        token,
+      }
+    ),
+
+  getMyConflicts: (
+    params?: {
+      status?: string;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+      cursor?: string;
+    },
+    token?: string
+  ) =>
+    apiFetch<EmployeeConflictIncidentListResponseDto>("/attendance/offline-conflicts/my", {
+      token,
+      params,
+    }),
+};
+
+// =============================================================================
+// Phase 9: Leave Types, Holiday Calendars & Overtime DTOs and APIs
+// =============================================================================
+
+export interface LeaveTypeDto {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  is_paid: boolean;
+  requires_approval: boolean;
+  allow_half_day: boolean;
+  max_consecutive_days?: number | null;
+  carry_forward_limit: number | string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaveTypeListResponseDto {
+  items: LeaveTypeDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LeaveTypeCreateRequestDto {
+  code: string;
+  name: string;
+  description?: string | null;
+  is_paid?: boolean;
+  requires_approval?: boolean;
+  allow_half_day?: boolean;
+  max_consecutive_days?: number | null;
+  carry_forward_limit?: number | string;
+  is_active?: boolean;
+}
+
+export interface LeaveTypeUpdateRequestDto {
+  name?: string;
+  description?: string | null;
+  is_paid?: boolean;
+  requires_approval?: boolean;
+  allow_half_day?: boolean;
+  max_consecutive_days?: number | null;
+  carry_forward_limit?: number | string;
+  is_active?: boolean;
+}
+
+export interface HolidayDto {
+  id: string;
+  tenant_id: string;
+  calendar_id: string;
+  holiday_date: string;
+  name: string;
+  holiday_type: "PUBLIC" | "COMPANY" | "OPTIONAL" | string;
+  is_optional: boolean;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HolidayListResponseDto {
+  items: HolidayDto[];
+  total: number;
+}
+
+export interface HolidayCreateRequestDto {
+  holiday_date: string;
+  name: string;
+  holiday_type?: string;
+  is_optional?: boolean;
+  description?: string | null;
+}
+
+export interface HolidayUpdateRequestDto {
+  holiday_date?: string;
+  name?: string;
+  holiday_type?: string;
+  is_optional?: boolean;
+  description?: string | null;
+}
+
+export interface HolidayCalendarDto {
+  id: string;
+  tenant_id: string;
+  year: number;
+  name: string;
+  location_id?: string | null;
+  department_id?: string | null;
+  is_default: boolean;
+  holiday_count?: number;
+  holidays?: HolidayDto[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HolidayCalendarListResponseDto {
+  items: HolidayCalendarDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface HolidayCalendarCreateRequestDto {
+  year: number;
+  name: string;
+  location_id?: string | null;
+  department_id?: string | null;
+  is_default?: boolean;
+}
+
+export interface HolidayCalendarUpdateRequestDto {
+  year?: number;
+  name?: string;
+  location_id?: string | null;
+  department_id?: string | null;
+  is_default?: boolean;
+}
+
+export interface UpcomingHolidayDto {
+  id: string;
+  holiday_date: string;
+  name: string;
+  holiday_type: string;
+  is_optional: boolean;
+  description?: string | null;
+  calendar_id: string;
+  calendar_name: string;
+}
+
+export interface UpcomingHolidaysResponseDto {
+  items: UpcomingHolidayDto[];
+  total: number;
+  limit: number;
+  offset: number;
+  resolved_calendar_id?: string | null;
+  resolved_calendar_name?: string | null;
+  resolution_source: string;
+}
+
+export interface LeaveBalanceDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  leave_type_id: string;
+  leave_type_code: string;
+  leave_type_name: string;
+  year: number;
+  annual_allocation: number | string;
+  carried_forward: number | string;
+  accrued: number | string;
+  used: number | string;
+  pending_approval: number | string;
+  available_balance: number | string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaveBalanceListResponseDto {
+  items: LeaveBalanceDto[];
+  total: number;
+}
+
+export interface LeaveRequestDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  employee_name?: string | null;
+  leave_type_id: string;
+  leave_type_code?: string | null;
+  leave_type_name?: string | null;
+  start_date: string;
+  end_date: string;
+  is_half_day: boolean;
+  half_day_period?: "FIRST_HALF" | "SECOND_HALF" | string | null;
+  total_days: number | string;
+  reason: string;
+  status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "CANCELLED" | string;
+  reviewer_user_id?: string | null;
+  reviewer_notes?: string | null;
+  decided_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaveRequestListResponseDto {
+  items: LeaveRequestDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LeaveRequestCreateDto {
+  leave_type_id: string;
+  start_date: string;
+  end_date: string;
+  is_half_day?: boolean;
+  half_day_period?: "FIRST_HALF" | "SECOND_HALF" | string | null;
+  reason: string;
+}
+
+export interface LeaveRequestDecisionRequestDto {
+  action: "APPROVE" | "REJECT" | string;
+  reason?: string | null;
+}
+
+export interface LeaveRequestCancelRequestDto {
+  reason?: string | null;
+}
+
+export interface OvertimeRuleDto {
+  id: string;
+  tenant_id: string;
+  name: string;
+  min_overtime_threshold_minutes: number;
+  max_daily_overtime_minutes?: number | null;
+  max_weekly_overtime_minutes?: number | null;
+  workday_multiplier: number | string;
+  weekend_multiplier: number | string;
+  holiday_multiplier: number | string;
+  requires_manager_approval: boolean;
+  requires_pre_approval: boolean;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OvertimeRuleListResponseDto {
+  items: OvertimeRuleDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface OvertimeRuleCreateRequestDto {
+  name: string;
+  min_overtime_threshold_minutes?: number;
+  max_daily_overtime_minutes?: number | null;
+  max_weekly_overtime_minutes?: number | null;
+  workday_multiplier?: number | string;
+  weekend_multiplier?: number | string;
+  holiday_multiplier?: number | string;
+  requires_manager_approval?: boolean;
+  requires_pre_approval?: boolean;
+  is_default?: boolean;
+  is_active?: boolean;
+}
+
+export interface OvertimeRuleUpdateRequestDto {
+  name?: string;
+  min_overtime_threshold_minutes?: number;
+  max_daily_overtime_minutes?: number | null;
+  max_weekly_overtime_minutes?: number | null;
+  workday_multiplier?: number | string;
+  weekend_multiplier?: number | string;
+  holiday_multiplier?: number | string;
+  requires_manager_approval?: boolean;
+  requires_pre_approval?: boolean;
+  is_default?: boolean;
+  is_active?: boolean;
+}
+
+export interface OvertimeRecordDto {
+  id: string;
+  tenant_id: string;
+  employee_id: string;
+  employee_name?: string | null;
+  attendance_day_id: string;
+  attendance_date: string;
+  overtime_rule_id?: string | null;
+  raw_overtime_minutes: number;
+  approved_overtime_minutes: number;
+  multiplier: number | string;
+  payable_overtime_minutes: number;
+  overtime_type: "WORKDAY" | "WEEK_OFF" | "HOLIDAY" | string;
+  status: "AUTO_APPROVED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | string;
+  reviewer_user_id?: string | null;
+  reviewer_notes?: string | null;
+  decided_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OvertimeRecordListResponseDto {
+  items: OvertimeRecordDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface OvertimeDecisionRequestDto {
+  action: "APPROVE" | "REJECT" | string;
+  reason?: string | null;
+  approved_minutes?: number | null;
+}
+
+export const leaveApi = {
+  // Leave Types
+  getLeaveTypes: (
+    params?: { is_active?: boolean; search?: string; limit?: number; offset?: number },
+    token?: string
+  ) =>
+    apiFetch<LeaveTypeListResponseDto>("/leave/types", {
+      token,
+      params,
+    }),
+
+  createLeaveType: (data: LeaveTypeCreateRequestDto, token?: string) =>
+    apiFetch<LeaveTypeDto>("/leave/types", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getLeaveType: (id: string, token?: string) =>
+    apiFetch<LeaveTypeDto>(`/leave/types/${id}`, {
+      token,
+    }),
+
+  updateLeaveType: (id: string, data: LeaveTypeUpdateRequestDto, token?: string) =>
+    apiFetch<LeaveTypeDto>(`/leave/types/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deleteLeaveType: (id: string, token?: string) =>
+    apiFetch<{ message?: string }>(`/leave/types/${id}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  // Leave Balances & Requests
+  getMyBalances: (token?: string) =>
+    apiFetch<LeaveBalanceListResponseDto>("/leave/balances/my", {
+      token,
+    }),
+
+  applyLeave: (data: LeaveRequestCreateDto, token?: string) =>
+    apiFetch<LeaveRequestDto>("/leave/requests", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getMyLeaveRequests: (
+    params?: {
+      status?: string;
+      leave_type_id?: string;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+      offset?: number;
+    },
+    token?: string
+  ) =>
+    apiFetch<LeaveRequestListResponseDto>("/leave/requests/my", {
+      token,
+      params,
+    }),
+
+  getSupervisorQueue: (
+    params?: {
+      status?: string;
+      employee_id?: string;
+      leave_type_id?: string;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+      offset?: number;
+    },
+    token?: string
+  ) =>
+    apiFetch<LeaveRequestListResponseDto>("/leave/requests", {
+      token,
+      params,
+    }),
+
+  getLeaveRequestDetail: (id: string, token?: string) =>
+    apiFetch<LeaveRequestDto>(`/leave/requests/${id}`, {
+      token,
+    }),
+
+  adjudicateLeaveRequest: (id: string, data: LeaveRequestDecisionRequestDto, token?: string) =>
+    apiFetch<LeaveRequestDto>(`/leave/requests/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  cancelLeaveRequest: (id: string, data?: LeaveRequestCancelRequestDto, token?: string) =>
+    apiFetch<LeaveRequestDto>(`/leave/requests/${id}/cancel`, {
+      method: "POST",
+      body: data ? JSON.stringify(data) : JSON.stringify({}),
+      token,
+    }),
+};
+
+export const holidayApi = {
+  getCalendars: (
+    params?: {
+      year?: number;
+      location_id?: string;
+      department_id?: string;
+      limit?: number;
+      offset?: number;
+    },
+    token?: string
+  ) =>
+    apiFetch<HolidayCalendarListResponseDto>("/holidays/calendars", {
+      token,
+      params,
+    }),
+
+  createCalendar: (data: HolidayCalendarCreateRequestDto, token?: string) =>
+    apiFetch<HolidayCalendarDto>("/holidays/calendars", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getCalendar: (id: string, token?: string) =>
+    apiFetch<HolidayCalendarDto>(`/holidays/calendars/${id}`, {
+      token,
+    }),
+
+  updateCalendar: (id: string, data: HolidayCalendarUpdateRequestDto, token?: string) =>
+    apiFetch<HolidayCalendarDto>(`/holidays/calendars/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deleteCalendar: (id: string, token?: string) =>
+    apiFetch<{ message?: string }>(`/holidays/calendars/${id}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  getHolidayEntries: (
+    calendarId: string,
+    params?: {
+      holiday_type?: string;
+      is_optional?: boolean;
+      start_date?: string;
+      end_date?: string;
+    },
+    token?: string
+  ) =>
+    apiFetch<HolidayListResponseDto>(`/holidays/calendars/${calendarId}/entries`, {
+      token,
+      params,
+    }),
+
+  createHolidayEntry: (calendarId: string, data: HolidayCreateRequestDto, token?: string) =>
+    apiFetch<HolidayDto>(`/holidays/calendars/${calendarId}/entries`, {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  updateHolidayEntry: (
+    calendarId: string,
+    holidayId: string,
+    data: HolidayUpdateRequestDto,
+    token?: string
+  ) =>
+    apiFetch<HolidayDto>(`/holidays/calendars/${calendarId}/entries/${holidayId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deleteHolidayEntry: (calendarId: string, holidayId: string, token?: string) =>
+    apiFetch<{ message?: string }>(`/holidays/calendars/${calendarId}/entries/${holidayId}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  getUpcomingHolidays: (
+    params?: { limit?: number; offset?: number; year?: number },
+    token?: string
+  ) =>
+    apiFetch<UpcomingHolidaysResponseDto>("/holidays/upcoming", {
+      token,
+      params,
+    }),
+};
+
+export const overtimeApi = {
+  getRules: (
+    params?: { is_active?: boolean; limit?: number; offset?: number },
+    token?: string
+  ) =>
+    apiFetch<OvertimeRuleListResponseDto>("/overtime/rules", {
+      token,
+      params,
+    }),
+
+  createRule: (data: OvertimeRuleCreateRequestDto, token?: string) =>
+    apiFetch<OvertimeRuleDto>("/overtime/rules", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getRule: (id: string, token?: string) =>
+    apiFetch<OvertimeRuleDto>(`/overtime/rules/${id}`, {
+      token,
+    }),
+
+  updateRule: (id: string, data: OvertimeRuleUpdateRequestDto, token?: string) =>
+    apiFetch<OvertimeRuleDto>(`/overtime/rules/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deleteRule: (id: string, token?: string) =>
+    apiFetch<{ message?: string }>(`/overtime/rules/${id}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  getRecords: (
+    params?: {
+      status?: string;
+      employee_id?: string;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+      offset?: number;
+    },
+    token?: string
+  ) =>
+    apiFetch<OvertimeRecordListResponseDto>("/overtime/records", {
+      token,
+      params,
+    }),
+
+  getMyRecords: (
+    params?: {
+      status?: string;
+      start_date?: string;
+      end_date?: string;
+      limit?: number;
+      offset?: number;
+    },
+    token?: string
+  ) =>
+    apiFetch<OvertimeRecordListResponseDto>("/overtime/records/my", {
+      token,
+      params,
+    }),
+
+  getRecordDetail: (id: string, token?: string) =>
+    apiFetch<OvertimeRecordDto>(`/overtime/records/${id}`, {
+      token,
+    }),
+
+  adjudicateRecord: (id: string, data: OvertimeDecisionRequestDto, token?: string) =>
+    apiFetch<OvertimeRecordDto>(`/overtime/records/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+};
+

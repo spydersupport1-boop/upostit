@@ -312,6 +312,9 @@ class EmployeeWorkplaceResponse(BaseModel):
     effective_from: date
     effective_to: date | None
     is_current: bool
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+    radius_meters: int | None = None
     created_at: datetime
 
 
@@ -351,4 +354,80 @@ class LocationEmployeeListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------------------
+# Workplace Wi-Fi Access Point DTOs (Phase 6 Milestone 6.4.A)
+# ---------------------------------------------------------------------------
+
+
+class WorkplaceWifiAccessPointCreateRequest(BaseModel):
+    """Payload to register an authorized Wi-Fi Access Point for a workplace."""
+
+    friendly_name: str = Field(..., min_length=1, max_length=100, description="Friendly hardware/zone name")
+    bssid: str = Field(..., description="Access point BSSID / MAC address (XX:XX:XX:XX:XX:XX)")
+    ssid: str | None = Field(default=None, max_length=64, description="Optional network SSID for diagnostic display")
+    is_active: bool = Field(default=True, description="Whether this AP is active for attendance matching")
+    effective_from: date = Field(default_factory=date.today, description="Date from which this AP is effective")
+    effective_to: date | None = Field(default=None, description="Optional expiry date")
+
+    @field_validator("bssid")
+    @classmethod
+    def validate_bssid(cls, v: str) -> str:
+        clean = v.strip().upper().replace("-", ":")
+        if not BSSID_REGEX.match(clean):
+            raise ValueError(
+                f"Invalid BSSID format '{v}'. Expected standard MAC format XX:XX:XX:XX:XX:XX."
+            )
+        return clean
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "WorkplaceWifiAccessPointCreateRequest":
+        if self.effective_to is not None and self.effective_to < self.effective_from:
+            raise ValueError("effective_to cannot be earlier than effective_from.")
+        return self
+
+
+class WorkplaceWifiAccessPointUpdateRequest(BaseModel):
+    """Payload to update an authorized Wi-Fi Access Point."""
+
+    friendly_name: str | None = Field(default=None, min_length=1, max_length=100)
+    ssid: str | None = Field(default=None, max_length=64)
+    is_active: bool | None = Field(default=None)
+    effective_from: date | None = Field(default=None)
+    effective_to: date | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "WorkplaceWifiAccessPointUpdateRequest":
+        if self.effective_from is not None and self.effective_to is not None:
+            if self.effective_to < self.effective_from:
+                raise ValueError("effective_to cannot be earlier than effective_from.")
+        return self
+
+
+class WorkplaceWifiAccessPointResponse(BaseModel):
+    """Response DTO for an authorized Wi-Fi Access Point."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    location_id: uuid.UUID
+    friendly_name: str
+    bssid: str
+    ssid: str | None = None
+    is_active: bool
+    effective_from: date
+    effective_to: date | None = None
+    created_by_user_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkplaceWifiAccessPointListResponse(BaseModel):
+    """List of authorized Wi-Fi Access Points for a workplace."""
+
+    items: list[WorkplaceWifiAccessPointResponse]
+    total: int
+
 

@@ -1,11 +1,20 @@
 import re
 import uuid
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+BSSID_REGEX = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 
 
 def _validate_shift_timing(
@@ -257,6 +266,13 @@ class ShiftAssignmentResponse(BaseModel):
     effective_to: date | None
     created_at: datetime
     updated_at: datetime
+    start_time: time | None = None
+    end_time: time | None = None
+    grace_period_minutes: int = 15
+    break_duration_minutes: int = 0
+    is_overnight: bool = False
+    is_flexible: bool = False
+    weekly_off_days: list[int] = Field(default_factory=list)
 
 
 class ShiftAssignmentListResponse(BaseModel):
@@ -313,10 +329,33 @@ class PunchRequest(BaseModel):
         ge=0,
         description="GPS radius accuracy in meters",
     )
+    wifi_bssid: str | None = Field(
+        default=None,
+        description="Connected access point BSSID (MAC address in XX:XX:XX:XX:XX:XX format)",
+    )
+    wifi_ssid: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Connected access point SSID (diagnostic/display only)",
+    )
+    wifi_signal_status: Literal["AVAILABLE", "UNAVAILABLE", "UNSUPPORTED", "PERMISSION_DENIED"] = (
+        Field(
+            default="AVAILABLE",
+            description="Device Wi-Fi telemetry capability status",
+        )
+    )
     device_id: str | None = Field(
         default=None,
         max_length=128,
         description="Hardware or browser identifier",
+    )
+    is_mock_location: bool | None = Field(
+        default=None,
+        description="Client-reported mock location flag (e.g. from Android mock provider)",
+    )
+    location_captured_at: datetime | None = Field(
+        default=None,
+        description="Hardware timestamp when the GPS fix was obtained",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -329,6 +368,16 @@ class PunchRequest(BaseModel):
         clean = v.strip()
         if not clean:
             raise ValueError("idempotency_key cannot be empty or whitespace.")
+        return clean
+
+    @field_validator("wifi_bssid")
+    @classmethod
+    def validate_wifi_bssid(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        clean = v.strip().upper().replace("-", ":")
+        if not BSSID_REGEX.match(clean):
+            raise ValueError(f"Invalid Wi-Fi BSSID format '{v}'. Expected XX:XX:XX:XX:XX:XX.")
         return clean
 
 
@@ -358,6 +407,10 @@ class AttendanceEventResponse(BaseModel):
     longitude: Decimal | None = None
     accuracy_meters: Decimal | None = None
     actor_user_id: uuid.UUID | None = None
+    applied_policy_version: int | None = None
+    wifi_bssid: str | None = None
+    wifi_ssid: str | None = None
+    is_mock_location: bool | None = None
     metadata: dict[str, Any] = Field(default_factory=dict, alias="metadata_json")
     created_at: datetime
 
@@ -597,3 +650,648 @@ class ReconciliationResponse(BaseModel):
     recalculated_count: int
     failed_count: int
     errors: list[str] = Field(default_factory=list)
+
+
+# ==============================================================================
+# Milestone 6.3.A: Company Attendance Policy & GPS Geofence Verification Schemas
+# ==============================================================================
+
+
+class AttendancePolicyMethod(StrEnum):
+    """Supported attendance verification methods."""
+
+    MANUAL = "MANUAL"
+    GPS = "GPS"
+    WIFI = "WIFI"
+    BIOMETRIC = "BIOMETRIC"
+    FACE_RECOGNITION = "FACE_RECOGNITION"
+
+
+class AttendancePolicyMode(StrEnum):
+    """Configurable operational modes for tenant attendance policies."""
+
+    MANUAL = "MANUAL"
+    GPS_ONLY = "GPS_ONLY"
+    WIFI_ONLY = "WIFI_ONLY"
+    BIOMETRIC_ONLY = "BIOMETRIC_ONLY"
+    FACE_RECOGNITION = "FACE_RECOGNITION"
+    COMBINED = "COMBINED"
+
+
+class AttendanceCombinationRule(StrEnum):
+    """Rule governing multi-method evaluation."""
+
+    AND = "AND"
+    OR = "OR"
+    PRIMARY_WITH_FALLBACK = "PRIMARY_WITH_FALLBACK"
+
+
+class OutOfGeofenceAction(StrEnum):
+    """Action taken when punch coordinates fall outside workplace geofence."""
+
+    REJECT = "REJECT"
+    FLAG_PENDING_REVIEW = "FLAG_PENDING_REVIEW"
+
+
+class TenantAttendancePolicyResponse(BaseModel):
+    """Response DTO for full company attendance policy."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    version: int
+    is_active: bool
+    default_mode: str
+    allowed_methods: list[str]
+    required_methods: list[str]
+    combination_rule: str
+    fallback_policy: dict[str, Any] = Field(default_factory=dict)
+    gps_config: dict[str, Any] = Field(default_factory=dict)
+    wifi_config: dict[str, Any] = Field(default_factory=dict)
+    biometric_config: dict[str, Any] = Field(default_factory=dict)
+    face_config: dict[str, Any] = Field(default_factory=dict)
+    created_by_user_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TenantAttendancePolicyCreateRequest(BaseModel):
+    """Payload to create a new immutable version of the company attendance policy."""
+
+    default_mode: AttendancePolicyMode = AttendancePolicyMode.MANUAL
+    allowed_methods: list[AttendancePolicyMethod] = Field(
+        default_factory=lambda: [AttendancePolicyMethod.MANUAL]
+    )
+    required_methods: list[AttendancePolicyMethod] = Field(
+        default_factory=lambda: [AttendancePolicyMethod.MANUAL]
+    )
+    combination_rule: AttendanceCombinationRule = AttendanceCombinationRule.OR
+    fallback_policy: dict[str, Any] = Field(default_factory=dict)
+    gps_config: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "max_accuracy_meters": 100,
+            "max_location_age_seconds": 30,
+            "enforce_assigned_workplace": True,
+            "out_of_geofence_action": "REJECT",
+        }
+    )
+    wifi_config: dict[str, Any] = Field(default_factory=dict)
+    biometric_config: dict[str, Any] = Field(default_factory=dict)
+    face_config: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_policy_rules(self) -> "TenantAttendancePolicyCreateRequest":
+        # Ensure required methods are included in allowed methods
+        for req in self.required_methods:
+            if req not in self.allowed_methods:
+                raise ValueError(
+                    f"Required verification method '{req}' must also be included in allowed_methods."
+                )
+
+        # GPS validation constraints
+        if (
+            AttendancePolicyMethod.GPS in self.required_methods
+            or self.default_mode == AttendancePolicyMode.GPS_ONLY
+        ):
+            max_acc = self.gps_config.get("max_accuracy_meters", 100)
+            if not isinstance(max_acc, (int, float)) or max_acc <= 0 or max_acc > 1000:
+                raise ValueError(
+                    "gps_config.max_accuracy_meters must be a positive number up to 1000m."
+                )
+            max_age = self.gps_config.get("max_location_age_seconds", 30)
+            if not isinstance(max_age, int) or max_age < 5 or max_age > 300:
+                raise ValueError(
+                    "gps_config.max_location_age_seconds must be an integer between 5s and 300s."
+                )
+            action = self.gps_config.get("out_of_geofence_action", "REJECT")
+            if action not in ("REJECT", "FLAG_PENDING_REVIEW"):
+                raise ValueError(
+                    "gps_config.out_of_geofence_action must be 'REJECT' or 'FLAG_PENDING_REVIEW'."
+                )
+
+        # Wi-Fi validation constraints
+        if (
+            AttendancePolicyMethod.WIFI in self.required_methods
+            or self.default_mode == AttendancePolicyMode.WIFI_ONLY
+        ):
+            max_wifi_age = self.wifi_config.get("max_wifi_age_seconds", 30)
+            if not isinstance(max_wifi_age, int) or max_wifi_age < 5 or max_wifi_age > 300:
+                raise ValueError(
+                    "wifi_config.max_wifi_age_seconds must be an integer between 5s and 300s."
+                )
+            fallback_action = self.wifi_config.get("fallback_action", "REJECT")
+            if fallback_action not in (
+                "REJECT",
+                "GPS_FALLBACK",
+                "SUPERVISOR_REVIEW",
+                "MANUAL_FALLBACK",
+            ):
+                raise ValueError(
+                    "wifi_config.fallback_action must be one of: 'REJECT', 'GPS_FALLBACK', 'SUPERVISOR_REVIEW', 'MANUAL_FALLBACK'."
+                )
+            mismatch_action = self.wifi_config.get("mismatch_action", "REJECT")
+            if mismatch_action not in ("REJECT", "FLAG_PENDING_REVIEW"):
+                raise ValueError(
+                    "wifi_config.mismatch_action must be 'REJECT' or 'FLAG_PENDING_REVIEW'."
+                )
+
+        return self
+
+
+class EmployeeAttendancePolicyResponse(BaseModel):
+    """Employee-safe minimal attendance policy DTO for mobile and web punch."""
+
+    tenant_id: uuid.UUID
+    version: int
+    default_mode: str
+    allowed_methods: list[str]
+    required_methods: list[str]
+    combination_rule: str
+    requires_gps: bool
+    requires_wifi: bool = False
+    requires_biometric: bool = False
+    requires_face: bool = False
+    max_accuracy_meters: int = 100
+    max_location_age_seconds: int = 30
+    max_wifi_age_seconds: int = 30
+    wifi_fallback_action: str = "REJECT"
+    allowed_fallback_methods: list[str] = Field(default_factory=list)
+
+
+class EmployeeGeofenceVerifyRequest(BaseModel):
+    """Payload for employee coordinate verification against an assigned workplace."""
+
+    location_id: uuid.UUID = Field(
+        ...,
+        validation_alias=AliasChoices("location_id", "workplace_id"),
+        description="Target workplace location UUID",
+    )
+    latitude: Decimal = Field(..., ge=-90, le=90, description="Device latitude coordinate")
+    longitude: Decimal = Field(..., ge=-180, le=180, description="Device longitude coordinate")
+    accuracy_meters: Decimal | None = Field(
+        default=None, ge=0, description="Horizontal accuracy in meters"
+    )
+    device_reported_at: datetime | None = Field(
+        default=None,
+        validation_alias=AliasChoices("device_reported_at", "recorded_at"),
+        description="Coordinate capture timestamp",
+    )
+
+
+class EmployeeGeofenceVerifyResponse(BaseModel):
+    """Result of employee workplace geofence verification."""
+
+    location_id: uuid.UUID
+    location_name: str
+    location_code: str
+    radius_meters: int
+    reported_latitude: Decimal
+    reported_longitude: Decimal
+    accuracy_meters: Decimal | None = None
+    distance_meters: float
+    within_geofence: bool
+    accuracy_acceptable: bool
+    location_freshness_acceptable: bool
+    freshness_acceptable: bool = True
+    is_inside: bool = True
+    can_punch: bool = True
+    message: str = "Inside workplace geofence perimeter. Ready to punch."
+    threat_boundary_notice: str = (
+        "ST_DWithin verifies geometric spherical proximity against the workplace perimeter. "
+        "Anti-spoofing and biometric liveness are enforced in Phase 7 Fraud Shield."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Employee Wi-Fi Verification DTOs (Phase 6 Milestone 6.4.A)
+# ---------------------------------------------------------------------------
+
+
+class WifiMatchStatus(StrEnum):
+    """Classification of device-reported Wi-Fi verification signal state."""
+
+    MATCHED = "MATCHED"
+    MISMATCHED = "MISMATCHED"
+    UNAVAILABLE = "UNAVAILABLE"
+    UNSUPPORTED = "UNSUPPORTED"
+    STALE = "STALE"
+    UNASSIGNED_WORKPLACE = "UNASSIGNED"
+    INACTIVE_WORKPLACE = "INACTIVE"
+
+
+class EmployeeWifiVerifyRequest(BaseModel):
+    """Payload for employee Wi-Fi verification probe against an assigned workplace."""
+
+    location_id: uuid.UUID = Field(
+        ...,
+        validation_alias=AliasChoices("location_id", "workplace_id"),
+        description="Target assigned workplace location UUID",
+    )
+    bssid: str | None = Field(
+        default=None,
+        description="Connected access point BSSID (MAC address in XX:XX:XX:XX:XX:XX format)",
+    )
+    ssid: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Connected access point SSID (display/diagnostic only)",
+    )
+    device_reported_at: datetime | None = Field(
+        default=None,
+        validation_alias=AliasChoices("device_reported_at", "recorded_at"),
+        description="Timestamp when device observed the Wi-Fi connection",
+    )
+    signal_status: Literal["AVAILABLE", "UNAVAILABLE", "UNSUPPORTED", "PERMISSION_DENIED"] = Field(
+        default="AVAILABLE",
+        description="Device Wi-Fi telemetry capability status",
+    )
+    platform: str | None = Field(
+        default=None,
+        max_length=32,
+        description="Client OS platform (android, ios, web)",
+    )
+
+    @field_validator("bssid")
+    @classmethod
+    def normalize_bssid(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        clean = v.strip().upper().replace("-", ":")
+        if not BSSID_REGEX.match(clean):
+            raise ValueError(f"Invalid BSSID format '{v}'. Expected XX:XX:XX:XX:XX:XX.")
+        return clean
+
+
+class EmployeeWifiVerifyResponse(BaseModel):
+    """Result of employee workplace Wi-Fi verification probe."""
+
+    location_id: uuid.UUID
+    location_name: str
+    location_code: str
+    reported_bssid: str | None = None
+    reported_ssid: str | None = None
+    match_status: WifiMatchStatus
+    is_verified: bool
+    matched_access_point_name: str | None = None
+    freshness_acceptable: bool
+    applicable_fallback: str | None = None
+    message: str
+
+
+# ---------------------------------------------------------------------------
+# Offline Conflict Resolution DTOs (Phase 8 Milestone 8.2)
+# ---------------------------------------------------------------------------
+
+
+class OfflineRejectedEventPayload(BaseModel):
+    """Payload of the primary rejected attendance punch that triggered session quarantine."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    local_id: str = Field(min_length=1, max_length=64, description="Client local SQLite queue ID")
+    idempotency_key: str = Field(
+        min_length=1, max_length=128, description="Unique client punch UUID"
+    )
+    event_type: str = Field(
+        description="Punch action type (CHECK_IN, CHECK_OUT, BREAK_START, BREAK_END)"
+    )
+    device_reported_at: datetime = Field(description="Client hardware capture timestamp (UTC)")
+    latitude: float | None = Field(default=None, ge=-90.0, le=90.0, description="WGS84 Latitude")
+    longitude: float | None = Field(
+        default=None, ge=-180.0, le=180.0, description="WGS84 Longitude"
+    )
+    accuracy_meters: float | None = Field(
+        default=None, ge=0.0, le=50000.0, description="Horizontal GPS accuracy"
+    )
+    device_id_hash: str | None = Field(
+        default=None, max_length=128, description="SHA-256 hash of device identity"
+    )
+    device_model: str | None = Field(
+        default=None, max_length=100, description="Hardware model name"
+    )
+    os_version: str | None = Field(
+        default=None, max_length=50, description="Operating system version"
+    )
+    is_mock_location: bool | None = Field(
+        default=False, description="Whether mock GPS provider was detected"
+    )
+    server_rejection_code: int | None = Field(
+        default=None, description="HTTP status code received upon FIFO rejection"
+    )
+    server_rejection_reason: str | None = Field(
+        default=None, max_length=500, description="Error detail message from backend"
+    )
+    location_id: uuid.UUID | None = Field(
+        default=None, description="Workplace location UUID if geofenced"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional device or sensor telemetry"
+    )
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event_type(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if clean not in ("CHECK_IN", "CHECK_OUT", "BREAK_START", "BREAK_END"):
+            raise ValueError(f"Invalid attendance event type: {v}")
+        return clean
+
+    @field_validator("device_reported_at")
+    @classmethod
+    def ensure_utc(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
+
+
+class OfflineDependentEventPayload(BaseModel):
+    """Payload of a quarantined dependent session punch."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    local_id: str = Field(min_length=1, max_length=64, description="Client local SQLite queue ID")
+    idempotency_key: str = Field(
+        min_length=1, max_length=128, description="Unique client punch UUID"
+    )
+    event_type: str = Field(
+        description="Punch action type (CHECK_IN, CHECK_OUT, BREAK_START, BREAK_END)"
+    )
+    device_reported_at: datetime = Field(description="Client hardware capture timestamp (UTC)")
+    latitude: float | None = Field(default=None, ge=-90.0, le=90.0)
+    longitude: float | None = Field(default=None, ge=-180.0, le=180.0)
+    accuracy_meters: float | None = Field(default=None, ge=0.0, le=50000.0)
+    device_id_hash: str | None = Field(default=None, max_length=128)
+    device_model: str | None = Field(default=None, max_length=100)
+    os_version: str | None = Field(default=None, max_length=50)
+    is_mock_location: bool | None = Field(default=False)
+    location_id: uuid.UUID | None = Field(default=None)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event_type(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if clean not in ("CHECK_IN", "CHECK_OUT", "BREAK_START", "BREAK_END"):
+            raise ValueError(f"Invalid attendance event type: {v}")
+        return clean
+
+    @field_validator("device_reported_at")
+    @classmethod
+    def ensure_utc(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
+
+
+class OfflineConflictBundleSubmitRequest(BaseModel):
+    """Request payload to submit an offline sequence conflict bundle for supervisor adjudication."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    bundle_id: str = Field(
+        min_length=1,
+        max_length=64,
+        description="Client-generated unique bundle identifier for the conflict session",
+    )
+    session_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Shift/session correlation identifier",
+    )
+    employee_notes: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Optional employee-provided justification and context",
+    )
+    employee_id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional target employee UUID (verified against caller)",
+    )
+    primary_rejected_event: OfflineRejectedEventPayload
+    dependent_events: list[OfflineDependentEventPayload] = Field(
+        default_factory=list,
+        max_length=50,
+        description="Quarantined dependent session punches",
+    )
+
+    @model_validator(mode="after")
+    def validate_bundle_integrity(self) -> "OfflineConflictBundleSubmitRequest":
+        # Check unique idempotency keys within the bundle
+        seen_keys: set[str] = {self.primary_rejected_event.idempotency_key}
+        for dep in self.dependent_events:
+            if dep.idempotency_key in seen_keys:
+                raise ValueError(
+                    f"Duplicate idempotency_key '{dep.idempotency_key}' detected within conflict bundle."
+                )
+            seen_keys.add(dep.idempotency_key)
+
+        # Validate chronological order: dependent events cannot precede primary rejected event
+        primary_time = self.primary_rejected_event.device_reported_at
+        prev_time = primary_time
+        for i, dep in enumerate(self.dependent_events):
+            if dep.device_reported_at < primary_time:
+                raise ValueError(
+                    f"Dependent event at index {i} ({dep.event_type}) timestamp "
+                    f"({dep.device_reported_at.isoformat()}) precedes primary event timestamp ({primary_time.isoformat()})."
+                )
+            if dep.device_reported_at < prev_time:
+                raise ValueError(
+                    f"Dependent events must be in chronological order. Event at index {i} precedes previous dependent event."
+                )
+            prev_time = dep.device_reported_at
+
+        return self
+
+
+class OfflineConflictIncidentResponse(BaseModel):
+    """Response returned upon conflict bundle submission."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    user_id: uuid.UUID
+    bundle_id: str
+    session_id: str | None = None
+    status: str
+    total_events_count: int
+    rejection_summary: str | None = None
+    employee_notes: str | None = None
+    submitted_at: datetime
+    decision: str | None = None
+    decision_reason: str | None = None
+    decided_at: datetime | None = None
+    resolved_correction_event_ids: list[str] = Field(default_factory=list)
+    idempotent_replay: bool = False
+
+
+class EmployeeConflictIncidentSummary(BaseModel):
+    """Sanitized summary of an attendance conflict incident tailored for employee mobile view."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    bundle_id: str
+    session_id: str | None = None
+    status: str
+    total_events_count: int
+    primary_event_type: str
+    primary_event_timestamp: datetime
+    rejection_summary: str | None = None
+    employee_notes: str | None = None
+    submitted_at: datetime
+    decision: str | None = None
+    decision_reason: str | None = None
+    decided_at: datetime | None = None
+    resolved_events_count: int = 0
+
+
+class EmployeeConflictIncidentListResponse(BaseModel):
+    """Paginated list of conflict incidents for the authenticated employee."""
+
+    items: list[EmployeeConflictIncidentSummary]
+    total: int
+    limit: int
+    cursor: str | None = None
+    has_more: bool = False
+
+
+# ==============================================================================
+# Phase 8 Milestone 8.3: Supervisor Conflict Adjudication & Queue Schemas
+# ==============================================================================
+
+
+class AttendanceConflictDecisionRequest(BaseModel):
+    """Payload to adjudicate an offline attendance conflict incident."""
+
+    action: str = Field(
+        ...,
+        description="Decision action ('APPROVE' or 'REJECT')",
+    )
+    reason: str = Field(
+        ...,
+        min_length=3,
+        description="Mandatory decision reason (minimum 3 non-whitespace characters)",
+    )
+    override_location_id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional workplace location UUID override for approved punches",
+    )
+
+    @field_validator("action")
+    @classmethod
+    def validate_action(cls, v: str) -> str:
+        clean = (v or "").strip().upper()
+        if clean in ("APPROVE", "APPROVED"):
+            return "APPROVE"
+        if clean in ("REJECT", "REJECTED"):
+            return "REJECT"
+        raise ValueError(f"Invalid decision action '{v}'. Must be 'APPROVE' or 'REJECT'.")
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 3:
+            raise ValueError("Decision reason must contain at least 3 non-whitespace characters.")
+        return clean
+
+
+class SupervisorConflictQueueItem(BaseModel):
+    """Summary item for the supervisor review queue."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    employee_name: str
+    employee_code: str
+    department_name: str | None = None
+    bundle_id: str
+    session_id: str | None = None
+    status: str
+    total_events_count: int
+    primary_event_type: str
+    primary_device_reported_at: datetime
+    rejection_summary: str | None = None
+    employee_notes: str | None = None
+    submitted_at: datetime
+    decision: str | None = None
+    decision_reason: str | None = None
+    reviewer_user_id: uuid.UUID | None = None
+    decided_at: datetime | None = None
+    resolved_correction_event_ids: list[str] = Field(default_factory=list)
+
+
+class SupervisorConflictQueueListResponse(BaseModel):
+    """Paginated list of conflict incidents for supervisor review."""
+
+    items: list[SupervisorConflictQueueItem]
+    total: int
+    limit: int
+    cursor: str | None = None
+    has_more: bool = False
+
+
+class ConflictIncidentEmployeeDetail(BaseModel):
+    """Employee profile details associated with a conflict incident."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    employee_code: str
+    first_name: str
+    last_name: str
+    work_email: str
+    department_name: str | None = None
+    reporting_manager_id: uuid.UUID | None = None
+
+
+class AttendanceConflictIncidentDetailResponse(BaseModel):
+    """Detailed forensic view of an attendance conflict incident."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    bundle_id: str
+    session_id: str | None = None
+    status: str
+    employee: ConflictIncidentEmployeeDetail
+    primary_rejected_event: dict[str, Any]
+    dependent_events: list[dict[str, Any]] = Field(default_factory=list)
+    total_events_count: int
+    rejection_summary: str | None = None
+    employee_notes: str | None = None
+    submitted_at: datetime
+    assigned_reviewer_id: uuid.UUID | None = None
+    decision: str | None = None
+    decision_reason: str | None = None
+    reviewer_user_id: uuid.UUID | None = None
+    decided_at: datetime | None = None
+    resolved_correction_event_ids: list[str] = Field(default_factory=list)
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AttendanceConflictDecisionResponse(BaseModel):
+    """Response returned upon supervisor conflict adjudication."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    employee_id: uuid.UUID
+    bundle_id: str
+    status: str
+    decision: str
+    decision_reason: str
+    reviewer_user_id: uuid.UUID
+    decided_at: datetime
+    resolved_correction_event_ids: list[str] = Field(default_factory=list)
+    affected_attendance_dates: list[date] = Field(default_factory=list)
+    recalculated_days_count: int = 0

@@ -3,16 +3,33 @@
 import uuid
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.attendance.conflict_service import (
+    adjudicate_conflict_incident,
+    get_conflict_incident_detail,
+    list_my_offline_conflict_incidents,
+    list_supervisor_conflict_queue,
+    submit_offline_conflict_bundle,
+)
 from services.api.attendance.correction_service import (
     apply_attendance_correction,
     get_attendance_day_event_audit_trail,
     list_attendance_corrections,
 )
+from services.api.attendance.models import TenantAttendancePolicy
+from services.api.attendance.policy_engine import (
+    create_new_policy_version,
+    get_active_tenant_policy,
+    list_tenant_policies,
+)
 from services.api.attendance.reconciliation import run_attendance_reconciliation
 from services.api.attendance.schemas import (
+    AttendanceCombinationRule,
+    AttendanceConflictDecisionRequest,
+    AttendanceConflictDecisionResponse,
+    AttendanceConflictIncidentDetailResponse,
     AttendanceCorrectionCreateRequest,
     AttendanceCorrectionListResponse,
     AttendanceCorrectionResponse,
@@ -22,7 +39,13 @@ from services.api.attendance.schemas import (
     AttendanceEventAuditListResponse,
     AttendanceEventListResponse,
     AttendanceEventResponse,
+    AttendancePolicyMethod,
+    AttendancePolicyMode,
     AttendanceRecalculateRequest,
+    EmployeeAttendancePolicyResponse,
+    EmployeeConflictIncidentListResponse,
+    OfflineConflictBundleSubmitRequest,
+    OfflineConflictIncidentResponse,
     PunchRequest,
     PunchResponse,
     ReconciliationRequest,
@@ -37,6 +60,9 @@ from services.api.attendance.schemas import (
     ShiftTemplateUpdateRequest,
     ShiftVersionCreateRequest,
     ShiftVersionResponse,
+    SupervisorConflictQueueListResponse,
+    TenantAttendancePolicyCreateRequest,
+    TenantAttendancePolicyResponse,
 )
 from services.api.attendance.service import (
     assign_shift_to_employee,
@@ -276,6 +302,8 @@ async def list_shift_assignments_endpoint(
     return await list_shift_assignments(
         session=db,
         tenant_id=ctx.tenant.id,
+        user_id=ctx.user.id,
+        user_role=ctx.user.role,
         employee_id=employee_id,
         shift_template_id=shift_template_id,
         effective_date=effective_date,
@@ -604,6 +632,310 @@ async def reconcile_attendance_endpoint(
     res = await run_attendance_reconciliation(
         session=db,
         tenant_id=ctx.tenant.id,
+        payload=payload,
+    )
+    await db.commit()
+    return res
+
+
+# ==============================================================================
+# Attendance Policy Management & Employee-Facing Policy Endpoints
+# ==============================================================================
+
+
+def _map_policy_to_employee_response(
+    policy: TenantAttendancePolicy,
+) -> EmployeeAttendancePolicyResponse:
+    allowed = policy.allowed_methods or ["MANUAL"]
+    required = policy.required_methods or ["MANUAL"]
+    requires_gps = "GPS" in required or policy.default_mode == "GPS_ONLY"
+    requires_wifi = "WIFI" in required or policy.default_mode == "WIFI_ONLY"
+    requires_biometric = "BIOMETRIC" in required
+    requires_face = "FACE_RECOGNITION" in required
+    gps_cfg = policy.gps_config or {}
+    max_acc = int(gps_cfg.get("max_accuracy_meters", 100))
+    max_age = int(gps_cfg.get("max_location_age_seconds", 30))
+    wifi_cfg = policy.wifi_config or {}
+    max_wifi_age = int(wifi_cfg.get("max_wifi_age_seconds", 30))
+    wifi_fallback_action = str(wifi_cfg.get("fallback_action", "REJECT"))
+    allowed_fallback_methods = [m for m in allowed if m in ("GPS", "MANUAL") and m != "WIFI"]
+
+    return EmployeeAttendancePolicyResponse(
+        tenant_id=policy.tenant_id,
+        version=policy.version,
+        default_mode=policy.default_mode,
+        allowed_methods=allowed,
+        required_methods=required,
+        combination_rule=policy.combination_rule,
+        requires_gps=requires_gps,
+        requires_wifi=requires_wifi,
+        requires_biometric=requires_biometric,
+        requires_face=requires_face,
+        max_accuracy_meters=max_acc,
+        max_location_age_seconds=max_age,
+        max_wifi_age_seconds=max_wifi_age,
+        wifi_fallback_action=wifi_fallback_action,
+        allowed_fallback_methods=allowed_fallback_methods,
+    )
+
+
+def _map_policy_to_response(policy: TenantAttendancePolicy) -> TenantAttendancePolicyResponse:
+    return TenantAttendancePolicyResponse(
+        id=policy.id,
+        tenant_id=policy.tenant_id,
+        version=policy.version,
+        is_active=policy.is_active,
+        default_mode=AttendancePolicyMode(policy.default_mode),
+        allowed_methods=[AttendancePolicyMethod(m) for m in (policy.allowed_methods or [])],
+        required_methods=[AttendancePolicyMethod(m) for m in (policy.required_methods or [])],
+        combination_rule=AttendanceCombinationRule(policy.combination_rule),
+        fallback_policy=policy.fallback_policy or {},
+        gps_config=policy.gps_config or {},
+        wifi_config=policy.wifi_config or {},
+        biometric_config=policy.biometric_config or {},
+        face_config=policy.face_config or {},
+        created_by_user_id=policy.created_by_user_id,
+        created_at=policy.created_at,
+        updated_at=policy.updated_at,
+    )
+
+
+@attendance_router.get(
+    "/policy/me",
+    response_model=EmployeeAttendancePolicyResponse,
+    summary="Get active company attendance policy (employee-safe)",
+    dependencies=[Depends(require_permission(Permission.VIEW_ATTENDANCE_POLICY))],
+)
+async def get_my_policy_endpoint(
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> EmployeeAttendancePolicyResponse:
+    """Returns the sanitized active attendance policy applicable to mobile and web employees."""
+    policy = await get_active_tenant_policy(session=db, tenant_id=ctx.tenant.id)
+    return _map_policy_to_employee_response(policy)
+
+
+@attendance_router.get(
+    "/policy",
+    response_model=list[TenantAttendancePolicyResponse],
+    summary="List all tenant attendance policy versions",
+    dependencies=[Depends(require_permission(Permission.MANAGE_ATTENDANCE_POLICY))],
+)
+async def list_policies_endpoint(
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> list[TenantAttendancePolicyResponse]:
+    """Lists all active and historical immutable attendance policies for the caller's tenant."""
+    policies = await list_tenant_policies(session=db, tenant_id=ctx.tenant.id)
+    return [_map_policy_to_response(p) for p in policies]
+
+
+@attendance_router.post(
+    "/policy",
+    response_model=TenantAttendancePolicyResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new immutable attendance policy version",
+    dependencies=[Depends(require_permission(Permission.MANAGE_ATTENDANCE_POLICY))],
+)
+async def create_policy_version_endpoint(
+    payload: TenantAttendancePolicyCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> TenantAttendancePolicyResponse:
+    """Creates a new active policy version, atomically deactivating previous versions."""
+    new_policy = await create_new_policy_version(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        creator_user_id=ctx.user.id,
+        data=payload,
+    )
+    await db.commit()
+    return _map_policy_to_response(new_policy)
+
+
+# ==============================================================================
+# Phase 8: Offline Attendance Conflict Resolution Endpoints
+# ==============================================================================
+
+
+@attendance_router.post(
+    "/offline-conflicts/submit",
+    response_model=OfflineConflictIncidentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit offline attendance sequence conflict bundle for supervisor review",
+    dependencies=[Depends(require_permission(Permission.SUBMIT_ATTENDANCE_CONFLICT))],
+)
+async def submit_offline_conflict_endpoint(
+    payload: OfflineConflictBundleSubmitRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> OfflineConflictIncidentResponse:
+    """Submits an OfflineSequenceConflictBundle containing a permanently rejected punch and its quarantined dependent events.
+
+    Guarantees:
+    - Derives employee and tenant identity strictly from authenticated context.
+    - Idempotent deduplication based on tenant-scoped bundle_id and SHA-256 canonical fingerprint.
+    - Returns HTTP 200 for identical retries, HTTP 409 for payload mismatches.
+    - Concurrency-safe persistence without modifying the immutable attendance ledger.
+    """
+    res = await submit_offline_conflict_bundle(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=ctx.user.id,
+        user_role=ctx.user.role,
+        payload=payload,
+    )
+    await db.commit()
+
+    if res.idempotent_replay:
+        response.status_code = status.HTTP_200_OK
+
+    return res
+
+
+@attendance_router.get(
+    "/offline-conflicts/my",
+    response_model=EmployeeConflictIncidentListResponse,
+    summary="List my submitted attendance conflict incidents",
+    dependencies=[Depends(require_permission(Permission.VIEW_ATTENDANCE_CONFLICTS))],
+)
+async def list_my_offline_conflicts_endpoint(
+    status_filter: str | None = Query(
+        default=None,
+        alias="status",
+        description="Filter by status (PENDING_REVIEW, APPROVED, REJECTED)",
+    ),
+    start_date: date | None = Query(
+        default=None, description="Filter submission start date (YYYY-MM-DD)"
+    ),
+    end_date: date | None = Query(
+        default=None, description="Filter submission end date (YYYY-MM-DD)"
+    ),
+    limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    cursor: str | None = Query(
+        default=None, description="Pagination cursor (ISO submitted_at timestamp)"
+    ),
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> EmployeeConflictIncidentListResponse:
+    """Lists submitted conflict incidents for the caller's employee profile.
+
+    Enforces strict employee isolation and sanitizes internal reviewer details.
+    """
+    return await list_my_offline_conflict_incidents(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=ctx.user.id,
+        status_filter=status_filter,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+@attendance_router.get(
+    "/offline-conflicts",
+    response_model=SupervisorConflictQueueListResponse,
+    summary="List supervisor attendance conflict review queue",
+    dependencies=[Depends(require_permission(Permission.RESOLVE_ATTENDANCE_CONFLICT))],
+)
+async def list_supervisor_conflicts_endpoint(
+    status_filter: str | None = Query(
+        default=None,
+        alias="status",
+        description="Filter by status (PENDING_REVIEW, APPROVED, REJECTED)",
+    ),
+    employee_id: uuid.UUID | None = Query(default=None, description="Filter by employee UUID"),
+    start_date: date | None = Query(
+        default=None, description="Filter submission start date (YYYY-MM-DD)"
+    ),
+    end_date: date | None = Query(
+        default=None, description="Filter submission end date (YYYY-MM-DD)"
+    ),
+    limit: int = Query(default=50, ge=1, le=100, description="Items per page"),
+    cursor: str | None = Query(
+        default=None, description="Pagination cursor (ISO submitted_at timestamp)"
+    ),
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> SupervisorConflictQueueListResponse:
+    """Lists attendance conflict incidents for supervisor review.
+
+    Scoping:
+    - Managers are strictly scoped to their direct reports.
+    - HR, Admin, and Owner have tenant-wide visibility.
+    - Employees are denied access (HTTP 403 Forbidden).
+    """
+    return await list_supervisor_conflict_queue(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=ctx.user.id,
+        user_role=ctx.user.role,
+        status_filter=status_filter,
+        employee_id=employee_id,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+@attendance_router.get(
+    "/offline-conflicts/{incident_id}",
+    response_model=AttendanceConflictIncidentDetailResponse,
+    summary="Get attendance conflict incident forensic details",
+    dependencies=[Depends(require_permission(Permission.VIEW_ATTENDANCE_CONFLICTS))],
+)
+async def get_conflict_incident_detail_endpoint(
+    incident_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> AttendanceConflictIncidentDetailResponse:
+    """Returns complete forensic telemetry, rejected punches, dependent events, and resolution status.
+
+    Scoping:
+    - Employees can only view their own submitted incidents.
+    - Managers can view their own incidents and direct reports.
+    - HR, Admin, and Owner have tenant-wide visibility.
+    """
+    return await get_conflict_incident_detail(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=ctx.user.id,
+        user_role=ctx.user.role,
+        incident_id=incident_id,
+    )
+
+
+@attendance_router.post(
+    "/offline-conflicts/{incident_id}/decision",
+    response_model=AttendanceConflictDecisionResponse,
+    summary="Adjudicate offline attendance conflict incident",
+    dependencies=[Depends(require_permission(Permission.RESOLVE_ATTENDANCE_CONFLICT))],
+)
+async def adjudicate_conflict_incident_endpoint(
+    incident_id: uuid.UUID,
+    payload: AttendanceConflictDecisionRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> AttendanceConflictDecisionResponse:
+    """Adjudicates an offline attendance conflict incident (APPROVE or REJECT).
+
+    Guarantees:
+    - Atomicity: executes under row-level pessimistic locking (`SELECT ... FOR UPDATE`).
+    - Concurrent protection: already-resolved incidents return HTTP 409 Conflict.
+    - Anti-self-approval: reviewers cannot adjudicate their own attendance conflicts (HTTP 403).
+    - Manager scoping: managers can only adjudicate direct reports (HTTP 403).
+    - Full rollback: if any correction event insertion fails, entire transaction rolls back cleanly.
+    """
+    res = await adjudicate_conflict_incident(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        incident_id=incident_id,
+        reviewer_user_id=ctx.user.id,
+        reviewer_role=ctx.user.role,
         payload=payload,
     )
     await db.commit()

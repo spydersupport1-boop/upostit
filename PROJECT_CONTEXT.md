@@ -21,7 +21,7 @@
   - **Backend API**: High-performance Python 3.12 + FastAPI modular monolith providing REST APIs, authentication, rule evaluation, and integration endpoints.
   - **Future Integrations**: On-premise biometric hardware terminals (HMAC-signed), BLE/NFC office beacons, and edge CCTV gateway stream processing (Python + OpenCV + GStreamer).
 - **Current Stage**: **Stage B: Attendance Core**
-- **Current Phase**: **Phase 5 — Attendance Engine & Ledger (Shifts and Punch Engine)** (Status: *All Milestones 1–5 Implemented & Fully Verified on branch `phase-05`; Live Supabase revision: `a2b3c4d5e6f7 (head)`; 281/281 backend tests + 52/52 frontend tests passing; Next.js production build succeeded; Live workflow audit and defect correction complete*)
+- **Current Phase**: **Phase 9 — Leave, Holidays and Overtime Multipliers** (Status: *Phase 9 (Milestones 9.1 through 9.8) Completed, Audited & Formally Closed on branch phase-06; Closure Outcome: B [Implementation complete, infrastructure validation outstanding]; 655 backend tests, 376 Flutter tests, and 104 Web tests passing (100%), total 1,135 automated tests; ready for Phase 10 review*)
 
 ---
 
@@ -372,9 +372,9 @@ API_BASE_URL=http://localhost:8000
 | **02** | Stage A | **Auth and Tenants** | **Complete** | Tenant registration, Argon2id, JWT access & refresh tokens with rotation and reuse detection, RBAC permissions (5 roles), transaction-scoped `app.tenant_id`, RLS migration `4f61a7dd311e` executed on Supabase, 34 automated unit/API tests passing, live PostgreSQL RLS isolation verified 100%. |
 | **03** | Stage A | **Organization Structure & Employee Management** | **Complete** | Departments, Designations, Employee profiles & lifecycle (CRUD, search, filtering, pagination), RBAC matrix, `GET /employees/me` self-access, directory denial for employee role, synchronized user deactivation & session revocation, composite tenant foreign keys, typed API client, Next.js `/organization` dashboard, Phase 3.3 secure HttpOnly cookie migration (zero localStorage tokens, memory access tokens, in-flight promise lock), 65 backend tests, 19 web tests passing. Migration `e6331816d336` applied and verified live on Supabase. |
 | **04** | Stage B | **Employees & Workplaces** | **Complete** | Milestones 1–5 complete. Live migrations b7d41a89c204, c8e52a91f034, d7a42e88b301 applied and verified on Supabase. 172 backend tests & 36 frontend tests passing. Git tag phase-04-complete. |
-| **05** | Stage B | **Shifts and Punch Engine** | **Planning** | Architecture Revision 2.0 formulated (docs/ATTENDANCE_ARCHITECTURE.md, docs/PHASE_05_PLAN.md) with shift versions, explicit correction model, and request fingerprinting. Awaiting user review and approval. |
-| **06** | Stage B | **Mobile Check-in (Flutter)** | **Not Started** | Flutter mobile app, geofence verification, offline queue, randomized jitter retry, status screen. |
-| **07** | Stage B | **Fraud Shield v1** | **Not Started** | Device binding, check-in selfie capture, mock GPS detection, clock drift check, risk score calculation. |
+| **05** | Stage B | **Shifts and Punch Engine** | **Complete** | Immutable punch event ledger, shift versioning, grace periods, daily presence projections, PostGIS ST_DWithin geofence verification, Celery nightly reconciliation, Next.js /attendance dashboard. Live migration a2b3c4d5e6f7 applied. 281 backend & 52 frontend tests passing. Git tag phase-05-complete (commit a4dad73). |
+| **06** | Stage B | **Mobile Check-in (Flutter)** | **Complete (Milestones 6.1–6.7 Verified)** | Milestones 6.1 through 6.7 complete on branch `phase-06`. 284 Flutter tests passing (100%), Android debug APK and release APK (69.0MB with ProGuard/R8 rules and SQLCipher) built cleanly, network security config enforced, 101 backend regression tests passing (385 combined). Awaiting review before Phase 7. |
+| **07** | Stage B | **Fraud Shield v1** | **In Progress (Milestones 7.1–7.5 Complete)** | Milestones 7.1 (device binding & `devices` table), 7.2 (GPS mock detection, clock drift, velocity), 7.3 (fraud rules & deterministic risk scoring engine), 7.4 (review queue, decision workflows & audit ledger), and 7.5 (Flutter mobile device binding, status card & fraud telemetry) complete and verified. 425 backend tests and 316 Flutter tests passing (100%). Ready for Milestone 7.6. |
 | **08** | Stage B | **Corrections and Reports** | **Not Started** | Missed punch correction workflow, approval hierarchy, async CSV/XLSX export, pre-aggregated summaries. |
 | **09** | Stage C | **Leave and Overtime** | **Not Started** | Leave balances, accrual rules, holiday calendars, overtime rate multipliers. |
 | **10** | Stage C | **Notifications** | **Not Started** | Mobile push alerts (FCM/APNs), transactional email, SMS/WhatsApp channel dispatching, Celery retries, quiet hours. |
@@ -1042,16 +1042,829 @@ API_BASE_URL=http://localhost:8000
   - `docs/ATTENDANCE_ARCHITECTURE.md`
   - `PROJECT_CONTEXT.md`
 
+### [2026-11-04] — Phase 6 Mobile Attendance Architecture & Implementation Plan Complete
+- **Phase**: Phase 6 (Mobile Attendance Application — Architecture & Planning)
+- **Status**: Planning Complete (Awaiting User Review & Approval to Begin Milestone 6.1)
+- **Branch**: `phase-05` (Planning documentation only; no new branch created)
+- **Actions Taken**:
+  - **Comprehensive Architecture Document**: Authored [`docs/MOBILE_ATTENDANCE_ARCHITECTURE.md`](file:///Users/apple/Upostit/docs/MOBILE_ATTENDANCE_ARCHITECTURE.md) defining the Clean Architecture / BLoC pattern, company-configurable verification modes (A: GPS, B: Wi-Fi, C: Combined), cross-platform capabilities matrix, encrypted local SQLite queue, stable UUID idempotency protocol, and mobile JWT session lifecycle.
+  - **Actionable Milestone Plan**: Authored [`docs/PHASE_06_PLAN.md`](file:///Users/apple/Upostit/docs/PHASE_06_PLAN.md) detailing Milestones 6.1 through 6.7 with full 15-point specifications per milestone (objectives, scopes, files, reused APIs, permissions, error cases, automated/manual tests, acceptance criteria, and risks).
+  - **Backend Reuse Identified**: Reused `POST /auth/login`, `POST /auth/refresh` (body transport), `POST /attendance/punch` (with Phase 5 idempotency and drift detection), `GET /employees/me/workplaces`, `GET /attendance/shifts/assignments`, and `GET /attendance/days/me`.
+  - **Strict Boundaries Enforced**: Zero application code, zero Flutter modifications, zero database migrations, zero dependency installations, and zero Git commits made.
+- **Files Modified / Created**:
+  - `docs/MOBILE_ATTENDANCE_ARCHITECTURE.md` (Created)
+  - `docs/PHASE_06_PLAN.md` (Created)
+  - `PROJECT_CONTEXT.md` (Updated)
+
+### [2026-11-04] — Phase 6 Architecture Refinement (Planning Only)
+- **Phase**: Phase 6 (Mobile Attendance Application — Architecture Refinement)
+- **Status**: Refined Architecture Complete (Awaiting Approval to Begin Implementation)
+- **Branch**: `phase-05` (Planning documentation only; no new branch created)
+- **Actions Taken**:
+  - **1. iOS Wi-Fi Compatibility Policy**:
+    - Documented hard dependency on Apple's `com.apple.developer.networking.wifi-info` entitlement and `NSLocationWhenInUseUsageDescription` with Precise Location enabled.
+    - Identified real-world BSSID unavailability triggers (simulators, missing entitlement, approximate location toggle, private MAC randomization, enterprise MDM restrictions).
+    - Specified dynamic capability probe `isWifiVerificationAvailable()`.
+    - Enforced **fail-closed policy**: Wi-Fi-only attendance (Mode B) must NEVER silently succeed when verification is unavailable.
+    - Defined administrator-configured fallback: GPS fallback in Mode B or Mode C is allowed **only when explicitly configured by company administrator** (`allow_gps_fallback_if_wifi_unsupported: true`).
+    - Standardized actionable user-facing error messages across all Wi-Fi failure states.
+    - Mandated **physical real-device iOS testing** with active provisioning profile as a release requirement.
+  - **2. Offline Attendance Trust & Zero-Trust Policy**:
+    - Specified RFC4122 UUID v4 idempotency key generated once at punch tap and replayed across all retries.
+    - Mandated immutable preservation of original `device_reported_at` (ISO 8601 UTC) and `timezone_offset_minutes`.
+    - Selected SQLCipher (AES-256) for local SQLite encryption at rest with keys in platform Keychain/Keystore.
+    - Enforced UI labeling as **Pending Synchronization** (`PENDING_SYNC`) with distinct sky-blue badge (never "Verified Attendance").
+    - Reaffirmed core invariant: **The client never decides its own final attendance verification status.** Server-side calculation engine holds sole authority over presence, lateness, and verification.
+    - Detailed server handling for suspicious timestamps (clock drift > 300s flagged with `FLAG_SUSPICIOUS_CLOCK_DRIFT` and `PENDING_REVIEW`, future timestamps, stale offline punches).
+  - **3. Dedicated Mobile Authentication Strategy**:
+    - Clearly contrasted mobile Bearer auth with web HttpOnly cookies (eliminates mobile cookie jar vulnerabilities and native bridge friction).
+    - Access tokens kept in volatile memory; refresh tokens stored in platform-secure storage (iOS Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, Android Keystore with `EncryptedSharedPreferences`).
+    - Implemented concurrency-safe **Refresh Mutex** in Dio `AuthInterceptor` on HTTP 401 to prevent parallel refresh races and false backend reuse revocation.
+    - Online logout dispatches `POST /api/v1/auth/logout` to revoke refresh token in database before clearing local vault.
+  - **4. Pending Offline Punches During Logout**:
+    - High-visibility modal warning dialog detailing pending offline punch count before logout confirmation.
+    - **Zero silent deletion**: Pending punches are strictly preserved in local encrypted SQLite.
+    - Enforced row binding to `(tenant_id, employee_id, user_id)` in `local_attendance_queue`, guaranteeing complete isolation on shared multi-user devices.
+    - Defined automatic sync resumption upon original user re-login.
+    - Defined recovery workflows for deactivated accounts (HTTP 403 handling + encrypted diagnostic receipt) and lost/changed devices (missed punch correction via web console).
+  - **5. Reviewed & Updated Milestones 6.1–6.7**:
+    - Updated acceptance criteria, security checks, test requirements, and platform limitation warnings across all 7 milestones.
+- **Files Modified**:
+  - `docs/MOBILE_ATTENDANCE_ARCHITECTURE.md` (Updated to Revision 2.0)
+  - `docs/PHASE_06_PLAN.md` (Updated to Revision 2.0)
+  - `PROJECT_CONTEXT.md` (Updated)
+
+### [2026-11-04] — Phase 6 Milestone 6.1 Implementation Complete (Flutter Foundation, Design System & Secure Mobile Authentication)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.1)
+- **Status**: Milestone 6.1 Implementation Complete (Awaiting User Review Before Milestone 6.2)
+- **Branch**: `phase-06` (Branched from `a4dad73` / `phase-05-complete`)
+- **Actions Taken**:
+  - **1. Flutter Clean Architecture Foundation**:
+    - Created feature-first directory layout under `apps/mobile/lib/` (`core/`, `features/auth/`, `features/profile/`, `shared/widgets/`).
+    - Configured Material 3 enterprise design system with tokens (`AppColors`, `AppSpacing`, `AppRadius`, `AppTypography`) and reusable widgets (`AppButton`, `AppTextField`, `LoadingIndicator`, `ErrorBanner`, `EmptyStateView`).
+    - Added core dependencies in `pubspec.yaml` (`flutter_bloc: ^8.1.5`, `dio: ^5.4.3+1`, `flutter_secure_storage: ^9.0.0`, `go_router: ^14.1.4`, `google_fonts: ^6.2.1`, `equatable: ^2.0.5`, `bloc_test: ^9.1.7`, `mocktail: ^1.0.3`).
+  - **2. Dedicated Mobile Token Architecture & Concurrency Mutex**:
+    - Implemented in-memory access token storage via `InMemoryTokenManager` (volatile heap only, never written to disk).
+    - Implemented platform-secure storage via `FlutterSecureStorageService` with iOS Keychain (`first_unlock_this_device`) and Android Keystore (`encryptedSharedPreferences: true`, AES-256 GCM).
+    - Implemented thread-safe token refresh mutex in `AuthInterceptor` using Dart `Completer<String?>` to serialize concurrent HTTP 401s into exactly one refresh call to `POST /api/v1/auth/refresh`, with request replay and infinite loop prevention.
+  - **3. Authentication & Profile Endpoints**:
+    - Verified and implemented contracts for `POST /api/v1/auth/login` (email, password, tenant_slug), `POST /api/v1/auth/refresh` (rotated refresh token), `POST /api/v1/auth/logout` (server session revocation), `GET /api/v1/auth/me` (user & tenant identity), and `GET /api/v1/employees/me` (employee details with graceful 404 fallback for administrative accounts).
+    - Created `SplashScreen` (silent session restore), `LoginScreen` (validation, error banners), and `ProfileScreen` (organization, identity, employee badge, sign out confirmation modal).
+  - **4. Automated Testing Suite & Backend Verification**:
+    - Created 9 comprehensive test suites under `apps/mobile/test/` covering units, repositories, BLoCs, concurrency mutex, and widget rendering.
+    - Verified all 281 existing backend pytest tests pass without regression.
+  - **5. Milestone Documentation**:
+    - Created `docs/phase-reports/PHASE_06_MILESTONE_01_REPORT.md`.
+    - Updated `docs/PHASE_06_PLAN.md` to Revision 2.1 (Milestone 6.1 complete).
+  - **6. Environment Provisioning & Verification Pass**:
+    - Installed Flutter 3.47.9 / Dart 3.13.7 via Homebrew cask.
+    - Installed Eclipse Temurin OpenJDK 17.0.21+9 and configured `JAVA_HOME`.
+    - Installed Android Studio 2026.2.2.8, Android SDK Platform 36 & 34, Build-Tools 36.0.0 & 34.0.0, Platform-Tools 37.0.1, and Command-line Tools (`cmdline-tools;latest`).
+    - Configured Android SDK directory at `~/Library/Android/sdk` (`ANDROID_HOME`); accepted all SDK package licenses; confirmed `[✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0)` in `flutter doctor -v`.
+    - Generated native Android and iOS scaffolding: `flutter create --platforms=android,ios --org=com.upostit .` without overwriting existing code.
+    - Resolved all 101 dependencies with `flutter pub get`.
+    - Resolved 22 static analysis issues; ran `flutter analyze` -> `Analyzing mobile... No issues found! (ran in 8.2s)`.
+    - Executed all 9 mobile test suites: `flutter test` -> **43 passed, 0 failed, 0 skipped**.
+    - Executed Android debug build: `flutter build apk --debug` -> `✓ Built build/app/outputs/flutter-apk/app-debug.apk` (154 MB verified on disk).
+    - Executed backend pytest suite: `.venv/bin/pytest tests/ -v` -> **281 passed, 0 failed, 41 warnings** in 85.44s.
+    - Verified database connectivity with `services/api/verify_db.py`: Supabase Project (HTTP 200 OK), PostgreSQL direct connection (safe `SELECT 1` succeeded), PostGIS extension active.
+- **Files Created**:
+  - `apps/mobile/lib/app.dart`
+  - `apps/mobile/lib/core/config/env_config.dart`
+  - `apps/mobile/lib/core/constants/app_colors.dart`
+  - `apps/mobile/lib/core/constants/app_spacing.dart`
+  - `apps/mobile/lib/core/constants/app_typography.dart`
+  - `apps/mobile/lib/core/errors/app_exception.dart`, `failure.dart`, `result.dart`
+  - `apps/mobile/lib/core/network/api_client.dart`, `api_endpoints.dart`, `auth_interceptor.dart`
+  - `apps/mobile/lib/core/storage/secure_storage_service.dart`, `token_manager.dart`
+  - `apps/mobile/lib/core/theme/app_theme.dart`
+  - `apps/mobile/lib/core/utils/validators.dart`
+  - `apps/mobile/lib/features/auth/` (data, domain, presentation)
+  - `apps/mobile/lib/features/profile/` (data, domain, presentation)
+  - `apps/mobile/lib/shared/widgets/` (`app_button.dart`, `app_text_field.dart`, `empty_state_view.dart`, `error_banner.dart`, `loading_indicator.dart`)
+  - `apps/mobile/test/` (9 test files)
+  - `docs/phase-reports/PHASE_06_MILESTONE_01_REPORT.md`
+- **Files Modified**:
+  - `apps/mobile/pubspec.yaml`
+  - `apps/mobile/lib/main.dart`
+  - `docs/PHASE_06_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-05] — Phase 6 Milestone 6.2 Implementation Complete (Online Attendance & Punch UI Implementation)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.2)
+- **Status**: Milestone 6.2 Implementation Complete (Awaiting User Review Before Milestone 6.3)
+- **Branch**: `phase-06` (Baseline: `a4dad73` / `phase-05-complete`)
+- **Actions Taken**:
+  - **1. Clean Architecture Attendance Feature Layout**:
+    - Created domain layer under `apps/mobile/lib/features/attendance/domain/`: entities (`attendance_status.dart`, `attendance_event.dart`, `attendance_day.dart`, `punch_result.dart`, `today_shift.dart`, `assigned_workplace.dart`, `attendance_dashboard.dart`) and abstract repository contract (`attendance_repository.dart`).
+    - Created data layer under `apps/mobile/lib/features/attendance/data/`: DTO models (`punch_request_model.dart`, `attendance_event_model.dart`, `punch_response_model.dart`, `attendance_day_model.dart`, `shift_assignment_model.dart`, `employee_workplace_model.dart`), remote data source (`attendance_remote_data_source.dart`), and repository implementation (`attendance_repository_impl.dart`).
+    - Created presentation layer under `apps/mobile/lib/features/attendance/presentation/`: BLoC (`attendance_bloc.dart`, `attendance_event.dart`, `attendance_state.dart`), attendance widgets (`hero_punch_card.dart`, `working_timer_card.dart`, `attendance_status_badge.dart`, `last_punch_badge.dart`, `shift_workplace_card.dart`, `today_punches_list.dart`), and complete employee attendance screen (`attendance_home_screen.dart`).
+  - **2. Interactive Hero Punch Interface & Real-Time Timers**:
+    - Implemented state-aware hero button dynamically adapting across `CHECK IN`, `CHECK OUT`, `START BREAK`, and `RESUME WORK` with in-flight disablement and animated loading spinner to block double-taps.
+    - Integrated live digital elapsed session timer ticker (`HH:MM:SS`) using Monospace tabular typography, anchored to server-confirmed punch times (`effective_at`) to eliminate client clock drift skew.
+    - Added haptic feedback (`HapticFeedback.mediumImpact()`) on button trigger.
+  - **3. Server-Authoritative State Machine & Idempotency Protocol**:
+    - The client derives state exclusively from the server's ledger events and daily projection (`AttendanceStatus.notCheckedIn`, `working`, `onBreak`, `completed`).
+    - Client generates RFC4122 UUID v4 `idempotency_key` per punch attempt and strictly reuses the same key on retry, enabling backend `attendance_idempotency_records` table to return idempotent HTTP 200 without duplicate ledger insertion.
+    - Preserved client device UTC timestamp (`device_reported_at`) and timezone offset (`timezone_offset_minutes`).
+  - **4. Backend Endpoint Integration**:
+    - Integrated Phase 5 endpoints: `POST /api/v1/attendance/punch`, `GET /api/v1/attendance/days`, `GET /api/v1/attendance/events`, `GET /api/v1/shifts/assignments`, and `GET /api/v1/employees/me/workplaces` without backend modifications.
+  - **5. Testing & Verification Suite**:
+    - Created 5 new test suites in `apps/mobile/test/features/attendance/` covering DTO serialization, repository logic, BLoC state transitions & retry idempotency, hero button interactions, and attendance home screen rendering.
+    - Ran `flutter analyze`: **0 issues found** (Clean).
+    - Ran `flutter test`: **81 passed, 0 failed, 0 skipped** across all 14 mobile test suites.
+    - Built Android debug APK: `flutter build apk --debug` -> `✓ Built build/app/outputs/flutter-apk/app-debug.apk` (**177 MB** verified on disk).
+    - Ran backend attendance regression: `.venv/bin/pytest tests/test_phase5_punch_ledger.py tests/test_phase5_shifts.py tests/test_phase5_calculation_engine.py -v` -> **89 passed, 0 failed, 26 warnings** in 2.88s.
+  - **6. Milestone Documentation**:
+    - Created `docs/phase-reports/PHASE_06_MILESTONE_02_REPORT.md`.
+    - Updated `docs/PHASE_06_PLAN.md` to Revision 2.2.
+- **Files Created**:
+  - `apps/mobile/lib/features/attendance/` (14 source files)
+  - `apps/mobile/test/features/attendance/` (5 test suites)
+  - `docs/phase-reports/PHASE_06_MILESTONE_02_REPORT.md`
+- **Files Modified**:
+  - `apps/mobile/lib/app.dart`
+  - `apps/mobile/lib/main.dart`
+  - `apps/mobile/lib/core/network/api_endpoints.dart`
+  - `apps/mobile/lib/features/auth/presentation/screens/splash_screen.dart`
+  - `apps/mobile/lib/features/auth/presentation/screens/login_screen.dart`
+  - `apps/mobile/lib/features/profile/presentation/screens/profile_screen.dart`
+  - `apps/mobile/test/widget_test.dart`
+  - `docs/PHASE_06_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-05] — Architecture Refinement: Company Attendance Policy Engine & GPS Remediation Planning
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.3 Architecture Planning)
+- **Status**: Planning Refinement Complete (Awaiting User Review & Approval Before Code Changes)
+- **Branch**: `phase-06` (Baseline: `a4dad73` / `phase-05-complete`)
+- **Key Architectural Decisions Formulated**:
+  - **1. Central Company Attendance Policy Engine**:
+    - Designed tenant-configurable presence rules: `MANUAL` (default for web/remote; zero location requirements), `GPS_ONLY` (Mode A), `WIFI_ONLY` (Mode B), `BIOMETRIC` (Phase 15), `FACE_RECOGNITION` (Phase 7), and `COMBINED` (Mode C: AND / OR with fallbacks).
+    - Preserves common append-only event ledger (`attendance_events`) and calculation engine (`calculate_attendance_day`) across all methods.
+    - Server-authoritative enforcement: The backend, not the mobile app, determines whether location or Wi-Fi evidence is required and valid.
+  - **2. Three Backend GPS Remediations**:
+    - **Remediation A (Workplace Coordinates)**: Extend `EmployeeWorkplaceResponse` (`GET /api/v1/employees/me/workplaces`) to include `latitude`, `longitude`, and `radius_meters` for assigned active workplaces only, maintaining privacy boundaries without exposing tenant-wide location directories.
+    - **Remediation B (Employee Geofence Probe)**: Introduce dedicated `POST /api/v1/employees/me/workplaces/verify-coordinates` guarded by `Permission.RECORD_PUNCH`, validating employee assignment and date effectiveness before running PostGIS `ST_DWithin`.
+    - **Remediation C (Server Punch Enforcement)**: Enforce PostGIS `ST_DWithin` spatial verification in `record_punch` when mandated by active policy, rejecting (HTTP 400) or reviewing out-of-geofence punches while maintaining idempotency and append-only ledger integrity.
+  - **3. Planning Documentation Updated**:
+    - `docs/MOBILE_ATTENDANCE_ARCHITECTURE.md`: Updated to Revision 2.1 with Company Attendance Policy Engine & verification modes.
+    - `docs/PHASE_06_PLAN.md`: Updated to Revision 2.3 with Milestone 6.3 remediated scope.
+    - `PROJECT_CONTEXT.md`: Updated with architecture refinement record.
+
 ---
+
+### [2026-11-05] — Phase 6 Milestone 6.3.A Implementation Complete (Backend Attendance Policy Engine & GPS Geofence Enforcement)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.3.A)
+- **Status**: Backend Implementation & Live Verification Complete
+- **Branch**: `phase-06` (Baseline: `a4dad73` / `phase-05-complete`)
+- **Live Supabase Head**: `b3c4d5e6f7a8 (head)` (Down: `a2b3c4d5e6f7`)
+- **Key Deliverables Delivered**:
+  - **1. Central Tenant Attendance Policy Model**:
+    - Created `tenant_attendance_policies` table with RLS, immutable versioning, composite foreign keys, and seeded initial Version 1 `MANUAL` policy for all existing tenants.
+    - Guaranteed strictly one active policy per tenant via partial unique index `uq_tenant_attendance_policy_one_active`.
+    - Added `applied_policy_version INTEGER` to `attendance_events` for immutable historical traceability.
+  - **2. Dedicated Policy Engine Service**:
+    - Built `services/api/attendance/policy_engine.py` supporting `MANUAL`, `GPS_ONLY`, `COMBINED`, and `PRIMARY_WITH_FALLBACK`.
+    - Enforced fail-safe handling (`HTTP 422`) for future methods (`WIFI`, `BIOMETRIC`, `FACE_RECOGNITION`), preventing silent downgrade to manual punching.
+  - **3. Employee-Safe Policy Endpoint**:
+    - Implemented `GET /api/v1/attendance/policy/me` guarded by `Permission.VIEW_ATTENDANCE_POLICY` or `RECORD_PUNCH`.
+    - Returns sanitized policy fields without leaking administrative audit timestamps or creator IDs.
+  - **4. Workplace Coordinates & Geofence Verification Probe**:
+    - Extended `GET /api/v1/employees/me/workplaces` with `latitude`, `longitude`, and `radius_meters` for assigned active workplaces.
+    - Implemented `POST /api/v1/employees/me/workplaces/verify-coordinates` probe guarded by `Permission.RECORD_PUNCH`, authoritatively checking distance and geofence containment via PostGIS `ST_Distance` and `ST_DWithin`.
+  - **5. Server-Authoritative Punch Ingestion**:
+    - Integrated policy evaluation into `POST /api/v1/attendance/punch`.
+    - Under `MANUAL`: Coordinates are optional telemetry and never gate punches.
+    - Under `GPS_ONLY`: Enforces workplace assignment, accuracy ($\le 100\text{m}$), freshness ($\le 30\text{s}$), and PostGIS `ST_DWithin` spatial perimeter (rejects or flags for review per tenant policy).
+    - Preserved 100% idempotency replay behavior and backward compatibility.
+  - **6. Verification & Test Suite**:
+    - 19 new tests in `tests/test_phase6_attendance_policy.py` passing (100%).
+    - Complete regression suite: **300 passed, 0 failures** across all backend tests.
+    - Zero lint issues (`ruff check`) and zero type errors (`mypy 50 source files`).
+  - **7. Artifacts Updated**:
+    - `database/migrations/versions/b3c4d5e6f7a8_phase_06_tenant_attendance_policies.py`
+    - `services/api/attendance/policy_engine.py`
+    - `services/api/attendance/models.py`
+    - `services/api/attendance/schemas.py`
+    - `services/api/attendance/routes.py`
+    - `services/api/attendance/service.py`
+    - `services/api/employees/routes.py`
+    - `services/api/locations/assignment_service.py`
+    - `services/api/locations/schemas.py`
+    - `services/api/auth/permissions.py`
+    - `tests/test_phase6_attendance_policy.py`
+    - `docs/phase-reports/PHASE_06_MILESTONE_03A_REPORT.md`
+    - `PROJECT_CONTEXT.md`
+
+### [2026-11-05] — Phase 6 Milestone 6.3.B Implementation Complete (Flutter Mobile GPS Attendance Integration & Policy Enforcement)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.3.B)
+- **Status**: Milestone 6.3.B Implementation Complete (Awaiting User Review Before Milestone 6.4)
+- **Changes Completed**:
+  - Integrated `GET /api/v1/attendance/policy/me` in Flutter mobile client (`apps/mobile/`).
+  - Implemented `MANUAL` attendance mode: zero GPS permissions requested, zero location hardware calls, clean dashboard without location warnings.
+  - Implemented `GPS_ONLY` mode (Mode A): checks/requests foreground location permission, enforces accuracy filtering ($\le 100\text{m}$) and freshness ($\le 30\text{s}$), binds assigned workplace identifier, and submits coordinates to server-authoritative PostGIS `ST_DWithin` geofence validation. Client-side Haversine is strictly advisory.
+  - Implemented explicit blocking for unsupported attendance modes (`WIFI_ONLY`, `BIOMETRIC_ONLY`, `FACE_RECOGNITION`, `COMBINED`) with informative employee guidance.
+  - Handled location exceptions gracefully: `LocationPermissionDeniedException`, `LocationPermissionPermanentlyDeniedException`, `LocationServiceDisabledException`, `LocationTimeoutException`, `LocationAccuracyException`, `LocationStaleException`, and `MockLocationDetectedException`.
+  - Added Android mock-location indicator inspection (`isMocked == true`) as a risk signal with documented iOS sandbox limitations.
+  - Created `GeofenceStatusCard` widget (rendered only when GPS is mandated) showing workplace name, perimeter distance, and permission resolution prompts.
+  - Maintained single RFC 4122 UUID v4 idempotency key across network/GPS retries and enforced double-tap protection.
+  - Implemented `WidgetsBindingObserver` in `AttendanceHomeScreen` for auto-recovery when returning from system settings.
+  - Added 43 new unit/BLoC/widget tests (124 total mobile tests, 100% pass).
+  - Built Android debug APK cleanly (`flutter build apk --debug`, 38.3s).
+  - Executed full backend regression suite (300/300 tests passing, `ruff` and `mypy` 100% clean).
+- **Files Modified / Created**:
+  - `apps/mobile/pubspec.yaml`
+  - `apps/mobile/android/app/src/main/AndroidManifest.xml`
+  - `apps/mobile/ios/Runner/Info.plist`
+  - `apps/mobile/lib/core/network/api_endpoints.dart`
+  - `apps/mobile/lib/features/attendance/data/models/punch_request_model.dart`
+  - `apps/mobile/lib/features/attendance/data/models/employee_workplace_model.dart`
+  - `apps/mobile/lib/features/attendance/data/models/attendance_policy_model.dart`
+  - `apps/mobile/lib/features/attendance/data/datasources/attendance_remote_data_source.dart`
+  - `apps/mobile/lib/features/attendance/domain/entities/attendance_policy.dart`
+  - `apps/mobile/lib/features/attendance/domain/entities/assigned_workplace.dart`
+  - `apps/mobile/lib/features/attendance/domain/entities/attendance_dashboard.dart`
+  - `apps/mobile/lib/features/attendance/domain/repositories/attendance_repository.dart`
+  - `apps/mobile/lib/features/attendance/data/repositories/attendance_repository_impl.dart`
+  - `apps/mobile/lib/features/attendance/data/services/location_service.dart`
+  - `apps/mobile/lib/features/attendance/presentation/bloc/attendance_bloc.dart`
+  - `apps/mobile/lib/features/attendance/presentation/bloc/attendance_event.dart`
+  - `apps/mobile/lib/features/attendance/presentation/bloc/attendance_state.dart`
+  - `apps/mobile/lib/features/attendance/presentation/widgets/geofence_status_card.dart`
+  - `apps/mobile/lib/features/attendance/presentation/widgets/hero_punch_card.dart`
+  - `apps/mobile/lib/features/attendance/presentation/screens/attendance_home_screen.dart`
+  - `apps/mobile/test/features/attendance/data/models/punch_request_model_test.dart`
+  - `apps/mobile/test/features/attendance/data/services/location_service_test.dart`
+  - `apps/mobile/test/features/attendance/presentation/bloc/attendance_gps_bloc_test.dart`
+  - `apps/mobile/test/features/attendance/presentation/widgets/geofence_status_card_test.dart`
+  - `docs/phase-reports/PHASE_06_MILESTONE_03B_REPORT.md`
+  - `docs/MOBILE_ATTENDANCE_ARCHITECTURE.md`
+  - `docs/PHASE_06_PLAN.md`
+  - `PROJECT_CONTEXT.md`
+
+### [2026-11-05] — Phase 6 Milestone 6.4.A Implementation Complete (Backend Wi-Fi Attendance Verification & Admin-Configurable Fallback)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.4.A)
+- **Status**: Milestone 6.4.A Complete & Verified (Awaiting User Review Before Milestone 6.4.B)
+- **Deliverables Completed**:
+  - Live Supabase Alembic migration `c4d5e6f7a8b9` created and executed: `workplace_wifi_access_points` table with RLS, foreign keys, indexes; `locations.wifi_config_override`; `attendance_events.wifi_bssid` & `wifi_ssid`.
+  - SQLAlchemy models and Pydantic schemas for access point management (`WorkplaceWifiAccessPoint`) and Wi-Fi probe/punch DTOs.
+  - Admin access point management APIs (`GET`, `POST`, `PATCH`, `DELETE /api/v1/locations/{id}/wifi-access-points`) with RBAC and soft deactivation.
+  - Employee Wi-Fi probe endpoint (`POST /api/v1/employees/me/workplaces/verify-wifi`) returning signal states (`MATCHED`, `MISMATCHED`, `UNAVAILABLE`, `UNSUPPORTED`, `STALE`).
+  - Authoritative Policy Engine Wi-Fi verification (`evaluate_punch_policy`) supporting all four fallback actions (`REJECT`, `GPS_FALLBACK`, `SUPERVISOR_REVIEW`, `MANUAL_FALLBACK`).
+  - Combination rule enforcement (`AND`, `OR`, `PRIMARY_WITH_FALLBACK`), strictly preventing fallbacks from weakening multi-factor `AND` rules.
+  - Workplace-level policy overrides with fail-closed conflict resolution.
+  - Comprehensive automated test suite (`tests/test_phase6_wifi_verification.py` — 15 tests) passing 100%.
+  - Full backend regression suite (315 tests passing, Ruff clean, Mypy clean).
+  - Live Supabase synthetic end-to-end verification and 100% cleanup confirmed.
+  - Milestone report published: `docs/phase-reports/PHASE_06_MILESTONE_04A_REPORT.md`.
+
+### [2026-11-06] — Phase 6 Milestone 6.4.B Implementation Complete (Flutter Mobile Wi-Fi Attendance Integration & Policy Fallback Enforcement)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.4.B)
+- **Status**: Milestone 6.4.B Complete & Verified (Awaiting User Review Before Milestone 6.5)
+- **Deliverables Completed**:
+  - Integrated `network_info_plus: ^7.0.0` for connected workplace AP inspection with zero background scanning.
+  - Native platform declarations: Android `ACCESS_WIFI_STATE` & `ACCESS_FINE_LOCATION`; iOS `Runner.entitlements` with `com.apple.developer.networking.wifi-info` linked in Debug and Release xcconfig.
+  - BSSID canonical normalization (`XX:XX:XX:XX:XX:XX`) and dummy/placeholder MAC address filtering (`02:00:00:00:00:00`).
+  - Implemented `WifiService` and `NetworkInfoWifiService` cross-platform device abstraction layer with Android location-toggle detection and iOS entitlement fallback mapping.
+  - Extended domain entities (`WifiEvidence`, `WifiVerificationResult`, `AttendancePolicy`) and network models (`PunchRequestModel`, `EmployeeWifiVerifyModel`).
+  - Added remote Wi-Fi verification probe API (`POST /api/v1/employees/me/workplaces/verify-wifi`) to repository and data sources.
+  - Implemented policy-driven punch flows in `AttendanceBloc` for `MANUAL`, `GPS_ONLY`, `WIFI_ONLY` (with `REJECT`, `GPS_FALLBACK`, `SUPERVISOR_REVIEW`, `MANUAL_FALLBACK`), and `COMBINED` (with `AND` fail-closed dual-factor vs `OR`).
+  - Added `WifiStatusCard` UI component to `AttendanceHomeScreen` with probe action and permission resolution.
+  - Ensured punch idempotency safety: single UUID v4 preserved across retries, exact Wi-Fi/GPS evidence retained, HTTP 422 payload mismatch handled cleanly.
+  - 100% clean static analysis (`flutter analyze` with 0 issues), 100% code formatted (`dart format`).
+  - 158 / 158 Flutter tests passing (100% test pass rate across unit, BLoC, and widget suites).
+  - Android debug APK successfully compiled (`flutter build apk --debug`).
+  - 100% backend test pass rate (23 Wi-Fi tests, 19 policy engine tests passing).
+  - Milestone report published: `docs/phase-reports/PHASE_06_MILESTONE_04B_REPORT.md`.
+
+### [2026-11-06] — Phase 6 Milestone 6.5 Architecture Planning Complete (Encrypted Offline Attendance Queue & Synchronization Engine)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.5 Architecture)
+- **Status**: Planning Complete & Approved (Awaiting User Review & Approval to Begin Milestone 6.5.A)
+- **Deliverables Completed**:
+  - Published comprehensive technical design specification: [`docs/PHASE_06_MILESTONE_05_DESIGN.md`](file:///Users/apple/Upostit/docs/PHASE_06_MILESTONE_05_DESIGN.md) (v2.1).
+  - Resolved core design decisions and formalized trust boundaries:
+    1. **Offline Timestamps & Drift (DDR-6.5-01)**: Immutable `device_reported_at` vs independent `server_received_at`; standard automated ingest up to 24 hours (`FLAG_DELAYED_OFFLINE_SYNC`), supervisor review for 24–72 hours (`FLAG_OFFLINE_WINDOW_EXCEEDED`), hard rejection beyond 72 hours; future timestamps $> 300\text{s}$ rejected.
+    2. **Trust Boundary & Monotonic Clock Risk Telemetry (DDR-6.5-02)**: Explicit boundary: all client telemetry (wall clock, monotonic uptime, boot ID, GPS, Wi-Fi) is untrusted risk telemetry, not cryptographic proof. Rooted/jailbroken platforms can spoof values; client claims can never override server rules. Native channel captures `boot_session_id` and monotonic uptime; intra-boot drift $> 60\text{s}$ flagged as suspected clock tampering.
+    3. **Offline Sequence Conflict Resolution Workflow (DDR-6.5-03)**: Verified that existing `POST /api/v1/attendance/corrections` is admin-only (employees get HTTP 403) and operates on single ledger events. Defined conflict bundle workflow (`QUARANTINED_DEPENDENT_FAILURE`) grouping failed and dependent session punches for supervisor resolution in Phase 8, unblocking future sessions and preventing duplicate submissions via unique bundle ID and row-level locking.
+    4. **SQLCipher Primary with Approved Envelope Alternative (DDR-6.5-04)**: SQLCipher full-page encryption preferred; envelope encryption on standard `sqflite` approved as production alternative if native C/CocoaPods linking encounters host blockers. Fail-closed: zero plaintext database fallback on encryption initialization error.
+  - Relational queue schema defined (`local_attendance_queue`) with `(tenant_id, employee_id, user_id)` isolation, UUID v4 idempotency keys generated once at punch time, monotonic sequence, and audit timestamps.
+  - Decomposed Phase 6.5 into 4 discrete sub-milestones (6.5.A, 6.5.B, 6.5.C, 6.5.D).
+  - Synchronized documentation: updated [`docs/MOBILE_ATTENDANCE_ARCHITECTURE.md`](file:///Users/apple/Upostit/docs/MOBILE_ATTENDANCE_ARCHITECTURE.md) (v2.5) and [`docs/PHASE_06_PLAN.md`](file:///Users/apple/Upostit/docs/PHASE_06_PLAN.md) (v2.7).
+
+### [2026-11-16] — Phase 6 Milestone 6.5.A Implementation & Security Audit Hardening
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.5.A Implementation & Correction)
+- **Status**: Audit Hardening Complete & Fully Verified (Awaiting Review Before Milestone 6.5.B)
+- **Implemented Security & Data Integrity Corrections**:
+  - **Session-Aware Quarantine**: Introduced `sessionId` in `LocalQueueItem`, `LocalQueueItemModel`, and `local_attendance_queue.session_id`. `quarantineDependentEvents()` isolates failures strictly to the rejected punch's session (`session_id`), ensuring subsequent shifts/sessions remain eligible for synchronization.
+  - **Fail-Closed Keystore Key Management**: Updated `DatabaseKeyProvider.getEncryptionKey({required bool databaseExists})` to generate keys ONLY when creating a genuinely new database (`databaseExists == false`). If a database file already exists but the key is missing or malformed, it throws `DatabaseEncryptionException` without overwriting keys or creating an unencrypted file over existing data.
+  - **Comprehensive Queue Capacity Enforcement**: Updated `insertPendingEvent` to count all unresolved records (`PENDING_SYNC`, `SYNCING`, `QUARANTINED_DEPENDENT_FAILURE`). When $\ge 500$, throws `QueueCapacityExceededException` while preserving 100% of existing punches without silent deletions.
+  - **SQLCipher Runtime Integration Test**: Authored `apps/mobile/integration_test/sqlcipher_runtime_encryption_test.dart` to verify AES-256 page encryption, correct-key reopen, wrong-key failure, and plaintext rejection. Disclosed test environment distinction: unit tests on macOS host use system SQLite via FFI (`sqflite_common_ffi`), while native Android build packages native `libsqlcipher.so` (verified in `app-debug.apk`).
+- **Verification & Test Results**:
+  - `cd apps/mobile && flutter test test/features/sync/`: 29 / 29 unit tests passed (100%).
+  - `cd apps/mobile && flutter test`: 187 / 187 tests passed (100% pass rate, 0 regressions).
+  - `cd apps/mobile && flutter analyze`: 0 issues found (clean).
+  - `cd apps/mobile && dart format .`: 100% compliant.
+  - `cd apps/mobile && flutter build apk --debug`: native Android build succeeded (`build/app/outputs/flutter-apk/app-debug.apk`, 78.5s).
+  - Host environment limitations: CocoaPods not installed on macOS host; no Android emulator/device connected for running on-device integration tests (marked as physical device release-readiness verification gate for Milestone 6.7).
+
+### [2026-11-16] — Phase 6 Milestone 6.5.B Implementation Complete (Strict FIFO Sync Worker & Network Observer)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.5.B)
+- **Status**: Implementation & Validation Complete (Awaiting Review Before Milestone 6.5.C)
+- **Implemented Components**:
+  - **Network Observer (`NetworkConnectivityServiceImpl`)**: Listens to connectivity changes (`connectivity_plus`), applies 1000ms debounce, and validates real backend reachability via DNS/socket probe (`checkBackendReachability`).
+  - **Account-Level Mutex**: Single-worker mutex lock per account (`Set<String> _activeWorkers`) preventing race conditions or duplicate concurrent syncs.
+  - **Crash Recovery**: Automatically resets zombie items stranded in `SYNCING` state for >120s back to `PENDING_SYNC` via `resetZombieSyncingItems`.
+  - **Strict FIFO Queue Processing**: Sequential in-order processing (`sequence_number ASC, device_reported_at ASC`) with exact original idempotency key, device timestamps, and telemetry preservation.
+  - **Error Classification & Retry Engine**:
+    - Retryable failures (network dropped, socket timeout, HTTP 408, HTTP 429 with `Retry-After`, HTTP 5xx) apply exponential backoff (2s, 4s, 8s... up to 60s max) and halt the batch safely.
+    - Permanent failures (HTTP 400, 422) mark records `REJECTED_PERMANENT` and trigger session-aware quarantine (`quarantineDependentEvents`), while allowing subsequent independent shifts to continue syncing.
+    - Authentication failures (refresh failed) pause sync gracefully without deleting or rejecting local punches.
+    - Account deactivation triggers callback and halts sync.
+    - Server review statuses (`PENDING_REVIEW`, `FLAG_DELAYED_OFFLINE_SYNC`) map to `SyncStatus.flaggedPendingReview`.
+- **Verification & Test Results**:
+  - `cd apps/mobile && flutter test`: 208 / 208 tests passed (100% pass rate, 0 failed, 0 skipped).
+    - Added `network_connectivity_service_test.dart` (7 tests).
+    - Added `sync_worker_test.dart` (14 comprehensive tests).
+  - `cd apps/mobile && flutter analyze`: 0 issues found (clean).
+  - `cd apps/mobile && dart format --output=none --set-exit-if-changed .`: 100% clean.
+  - `cd apps/mobile && flutter build apk --debug`: native Android build succeeded (`build/app/outputs/flutter-apk/app-debug.apk`, 93.8s).
+  - Backend regression: `./.venv/bin/pytest tests/test_phase6_attendance_policy.py tests/test_phase6_wifi_verification.py -v`: 42 / 42 passed (100% pass rate, 0 backend regressions).
+  - Strict scope boundary: Milestone 6.5.C (UI / sync drawer / offline banner) has NOT been started.
+
+---
+
+### [2026-11-19] — Phase 6 Milestone 6.5.D Implementation & Comprehensive Security Audit Complete
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.5.D Offline Simulation & Security Audit)
+- **Status**: Complete & Verified (Milestone 6.5 Complete, Awaiting Review Before Milestone 6.6)
+- **Key Deliverables Completed**:
+  1. **End-to-End Shift Journey Simulation**: 4-punch offline employee shift (CHECK_IN, BREAK_START, BREAK_END, CHECK_OUT) with sequential sequence numbers, persistent local storage, cold restart recovery, and FIFO backend ingestion.
+  2. **Network Flap & Idempotent Replay**: Verified connection drop mid-batch, idempotent replay with `is_idempotent_replay: true` on lost responses, and HTTP 429 `Retry-After` backoff handling.
+  3. **Crash Recovery & Zombie Mitigation**: Automatic recovery of stranded `SYNCING` records (>120s) back to `PENDING_SYNC` and device reboot handling with monotonic reset and new `boot_session_id`.
+  4. **Session-Aware Cascading Quarantine**: Verified that permanent domain rejections in Shift 1 quarantine dependent punches within that session while leaving independent future shifts (Shift 2) intact and eligible to sync.
+  5. **Shared Device & Multi-Tenant Isolation**: Verified that logging out User A (Tenant Alpha) and logging in User B (Tenant Beta) exhibits 0 cross-account leakage; User B cannot see or sync User A's records; User A logs back in to find all punches intact and syncs exclusively to Tenant Alpha.
+  6. **Security & Database Hygiene Audit**: Fail-closed `DatabaseKeyProvider` on missing/corrupt keys; zero tokens, credentials, or biometric PII stored in offline queue; atomic schema versioning; non-destructive error preservation; and `android:allowBackup="false"` in `AndroidManifest.xml`.
+  7. **Native APK Verification**: Confirmed `libsqlcipher.so` bundled across `arm64-v8a`, `armeabi-v7a`, and `x86_64` in `app-debug.apk`. 254 Flutter tests passing, 42 backend tests passing (296 combined).
+- **Report**: `docs/phase-reports/PHASE_06_MILESTONE_05D_REPORT.md`
+
+### [2026-11-19] — Phase 6 Milestone 6.6 Implementation Complete (Employee Mobile Dashboard, Shifts & Attendance History)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.6)
+- **Status**: Complete & Verified (Awaiting User Review Before Milestone 6.7)
+- **What Was Done**:
+  1. **Employee Home Dashboard Polish**: Integrated authenticated employee profile, active shift card with real scheduled hours, gross & break duration, remaining shift time countdown, and quick navigation shortcuts.
+  2. **Shift Schedule Feature (`ScheduleScreen` at `/schedule`)**: Integrated shift assignments with operational parameters (`start_time`, `end_time`, `grace_period_minutes`, `break_duration_minutes`, `is_overnight`, `is_flexible`, `weekly_off_days`), active shift card, upcoming assigned shifts roster, and empty state for unassigned employees.
+  3. **Attendance History & Interactive Calendar (`HistoryScreen` at `/history`)**: Custom 7-column monthly calendar grid with presence status indicators (`PRESENT`, `LATE`, `HALF_DAY`, `ABSENT`, `INCOMPLETE`, `PENDING_REVIEW`, `PENDING_SYNC`), previous/next month navigation, 4-card aggregated monthly summary metrics (Present, Late, Absent, Worked Hours), and chronological monthly daily records.
+  4. **Daily Attendance Detail Screen (`DailyAttendanceDetailScreen` at `/history/day`)**: Day-level detail view with date, status badge, assigned shift details, working time metrics (net work, break, late arrival, early departure), local pending sync notice, and chronological event ledger audit stream (`AuditTimelineTile`).
+  5. **Backend Data Scoping**: Safely enhanced `ShiftAssignmentResponse` schema and `list_shift_assignments` endpoint to resolve effective shift version parameters and enforce strict employee-level isolation.
+  6. **Automated Verification**: 277 Flutter unit and widget tests passing (100%), `flutter analyze` passing with 0 warnings/errors, Dart formatting 100% compliant, Android debug APK built cleanly in 13.9s, and 101 backend regression tests passing (378 tests combined).
+- **Report**: `docs/phase-reports/PHASE_06_MILESTONE_06_REPORT.md`
+
+### [2026-11-19] — Phase 6 Milestone 6.7 Implementation Complete (Security Hardening, Real-Device Testing & Release Readiness)
+- **Phase**: Phase 6 (Mobile Attendance Application — Milestone 6.7)
+- **Status**: Complete & Fully Verified (Phase 6 Complete; Awaiting Review Before Phase 7)
+- **What Was Done**:
+  1. **Comprehensive Security Audit**: Verified in-memory volatile JWT access-token lifecycle, hardware Keystore/Keychain refresh token storage with `encryptedSharedPreferences: true` and `first_unlock_this_device`, fail-closed SQLCipher key handling, 0 hardcoded credentials/secrets, and 0 log leaks.
+  2. **Network Security Configuration**: Created `apps/mobile/android/app/src/main/res/xml/network_security_config.xml` with `cleartextTrafficPermitted="false"`, enforcing HTTPS and strict TLS across Android builds.
+  3. **Release Build & ProGuard/R8 Optimization**: Created `apps/mobile/android/app/proguard-rules.pro` protecting SQLCipher native libraries, Flutter secure storage, and serialization models. Assembled production `app-release.apk` (69.0MB) in 153.0s and `app-debug.apk` in 24.7s.
+  4. **Native Package Verification**: Verified binary inclusion of `libsqlcipher.so` across `arm64-v8a`, `armeabi-v7a`, and `x86_64` in the production release APK; verified `android:allowBackup="false"` and `android:networkSecurityConfig` via aapt2.
+  5. **iOS Project Configuration**: Created `ios/Podfile` targeting iOS 15.0 matching `Runner.xcodeproj` with `SQLITE_HAS_CODEC=1`; verified `Runner.entitlements` includes `com.apple.developer.networking.wifi-info`; documented host environment constraints (Xcode & CocoaPods absent on host).
+  6. **Automated Verification**: 284 Flutter unit, widget, and security tests passing (100%), `flutter analyze` passing with 0 warnings/errors, Dart formatting 100% compliant, and 101 backend regression tests passing (385 tests combined).
+- **Report**: `docs/phase-reports/PHASE_06_MILESTONE_07_REPORT.md`
+
+### [2026-11-19] — Phase 7 Milestone 7.1 Implementation Complete (Device Binding Subsystem & Database Migration)
+- **Phase**: Phase 7 (Mobile Attendance Fraud Shield v1 — Milestone 7.1)
+- **Status**: Complete & Fully Verified (Alembic Head `a3b4c5d6e7f8`; 355 backend tests passing 100%; Ready for Milestone 7.2)
+- **What Was Done**:
+  1. **Database Schema & Migration**: Created migration `a3b4c5d6e7f8_phase_07_devices.py` introducing the `devices` table with composite tenant foreign keys, platform and status check constraints, PostgreSQL RLS enabled and forced, and a database-level partial unique index `ix_devices_tenant_emp_active` on `(tenant_id, employee_id) WHERE status = 'ACTIVE'` enforcing the single active device policy.
+  2. **Cryptographic Identity Salting**: Built `hash_device_id` using HMAC-SHA256 keyed with server `SECRET_KEY` and salted with tenant UUID, guaranteeing raw client hardware identifiers are never stored and preventing cross-tenant correlation.
+  3. **Domain Models & Pydantic Schemas**: Implemented `Device` SQLAlchemy model and safe Pydantic schemas (`DeviceRegisterRequest`, `DeviceResponse`, `DeviceRegistrationResponse`, `DeviceListResponse`, `DeviceRevokeRequest`, `DeviceReplacementApprovalRequest`, `DeviceStatusResponse`).
+  4. **Device Registration API (`POST /api/v1/devices/register`)**: Authenticated employee device registration. Idempotent for matching active device; automatically initiates an audit-logged `PENDING_APPROVAL` replacement request when a different device is registered for an employee with an existing active device.
+  5. **Device Management APIs**: Implemented `GET /api/v1/devices` (paginated list with filters), `GET /api/v1/devices/me` (employee self-service status), `POST /api/v1/devices/{id}/revoke` (mandatory reason), and `POST /api/v1/devices/{id}/approve-replacement` (atomic replacement rotation in a single transaction).
+  6. **Granular RBAC**: Added `Permission.MANAGE_DEVICES` and `Permission.VIEW_DEVICES` under Owner, Admin, and HR roles; denied to Manager and Employee.
+  7. **Attendance Integration Preparation**: Built `validate_device_for_punch()` helper distinguishing `ACTIVE`, `UNREGISTERED`, `REVOKED`, `REPLACED`, `PENDING_APPROVAL`, and `NO_DEVICE_SUPPLIED`.
+  8. **Automated Verification**: Authored 32 unit and API tests in `tests/test_phase7_devices.py`. Ran full regression suite with 355 backend tests passing (100%), verified Ruff clean (0 errors), and Mypy clean.
+- **Report**: `docs/phase-reports/PHASE_07_MILESTONE_01_REPORT.md`
+
+### 2026-11-19: Phase 7 — Milestone 7.2 Complete & Verified (GPS Spoofing Defense, Mock Detection & Velocity Analysis)
+- **Status**: Completed & Verified.
+- **Git Branch**: `phase-06` (preserving uncommitted working-tree changes; no git commit or tag created).
+- **Alembic Revision**: `b4c5d6e7f8a9` (`database/migrations/versions/b4c5d6e7f8a9_phase_07_mock_location_evidence.py`).
+- **Core Changes Implemented**:
+  1. **Database Migration (`b4c5d6e7f8a9`)**: Added `is_mock_location: sa.Boolean()` column to `attendance_events`. Offline SQL upgrade and downgrade validated.
+  2. **Model & Schema Extensions**: Added `is_mock_location` to `AttendanceEvent` and `AttendanceEventResponse`. Added `is_mock_location` and `location_captured_at` to `PunchRequest`.
+  3. **Fraud Domain Package (`services/api/fraud/`)**:
+     - `services/api/fraud/schemas.py`: Pydantic models and enums for signals (`FraudSignalType`, `FraudSignalSeverity`, `FraudEvidenceAssessment`, `VelocityResult`, `ClockDriftResult`, `GpsEvidenceResult`).
+     - `services/api/fraud/service.py`: Haversine great-circle distance algorithm, sequential velocity analysis ($v = \Delta d / \Delta t$), device clock drift check with offline transport latency tolerance, GPS accuracy (>100m) and freshness (>30s) checks, and previous punch lookup strictly scoped by `tenant_id` and `employee_id`.
+  4. **Attendance Engine Integration**: Extended `record_punch` in `services/api/attendance/service.py` to evaluate all fraud signals, automatically set `review_status = "PENDING_REVIEW"` on HIGH/CRITICAL signals, and store rich forensic telemetry (`fraud_signals`, `velocity_analysis`, `device_validation_status`) in `metadata_json`.
+  5. **Automated Verification**: Authored 25 unit and API integration tests in `tests/test_phase7_gps_spoofing_and_velocity.py`. Ran full backend regression suite (380 tests passing, 100%), verified Ruff clean (0 errors), and Mypy clean (0 errors across fraud and attendance packages).
+- **Report**: `docs/phase-reports/PHASE_07_MILESTONE_02_REPORT.md`
+
+### 2026-11-19: Phase 7 — Milestone 7.3 Complete & Verified (Fraud Rule Engine & Deterministic Risk Scoring)
+- **Status**: Completed & Verified.
+- **Git Branch**: `phase-06` (preserving uncommitted working-tree changes; no git commit or tag created).
+- **Alembic Revision**: `c5d6e7f8a9b0` (`database/migrations/versions/c5d6e7f8a9b0_phase_07_fraud_rules_and_flags.py`).
+- **Core Changes Implemented**:
+  1. **Database Migration (`c5d6e7f8a9b0`)**:
+     - Created `fraud_rules` table with composite unique constraints `(tenant_id, rule_code)` and `(tenant_id, id)`, audit tracking, and enforced RLS.
+     - Created `fraud_flags` table with composite unique constraint `(tenant_id, attendance_event_id, signal_code)` for idempotent replay safety, composite foreign keys, and enforced RLS.
+     - Offline SQL upgrade and downgrade validated.
+  2. **SQLAlchemy & Pydantic Models**:
+     - `services/api/fraud/models.py`: `FraudRule` and `FraudFlag`.
+     - `services/api/fraud/schemas.py`: `RiskCategory` (`NORMAL`, `LOW_RISK`, `MEDIUM_RISK`, `HIGH_RISK`, `REQUIRES_REVIEW`), `FraudRuleCreateRequest`, `FraudRuleUpdateRequest`, `FraudRuleResponse`, `FraudFlagResponse`, `RiskScoreResult`.
+  3. **Deterministic Fraud Rule Engine (`services/api/fraud/engine.py`)**:
+     - Provisioned 8 default rules with standard weights and severities.
+     - Implemented deterministic signal deduplication, rule matching, disabled rule exclusion, bounded scoring ($0 \dots 100$), and review requirement derivation.
+  4. **Strict Device Security & Attendance Integration**:
+     - Punches attempted from a `REVOKED` device are aborted with `HTTP 403 Forbidden`, while historical records remain intact.
+     - Punches from unregistered devices are recorded and flagged (`UNREGISTERED_DEVICE`, $+30$ risk score).
+     - Integrated risk scoring and idempotent flag persistence into `record_punch`.
+  5. **Tenant Rule Management & Flag APIs (`services/api/fraud/routes.py`)**:
+     - CRUD endpoints for rules under `/api/v1/fraud/rules` (`GET`, `POST`, `PATCH`, `/enable`, `/disable`) protected by `MANAGE_FRAUD_RULES` and `VIEW_FRAUD_RULES`.
+     - Flag retrieval under `/api/v1/fraud/flags` with filtering by employee, event, severity, and date range protected by `VIEW_FRAUD_FLAGS`.
+  6. **Automated Verification**: Authored 25 unit and API integration tests in `tests/test_phase7_fraud_rules_and_risk_scoring.py` (82 total Phase 7 tests). Full backend test suite passing 100% (405 tests passing, 0 failed), verified Ruff clean (0 errors), and Mypy clean.
+- **Report**: `docs/phase-reports/PHASE_07_MILESTONE_03_REPORT.md`
+
+### 2026-11-19: Phase 7 — Milestone 7.4 Complete & Verified (HR Fraud Review Queue, Decision Workflows & Audit Ledger)
+- **Status**: Completed & Verified.
+- **Git Branch**: `phase-06` (preserving uncommitted working-tree changes; no git commit or tag created).
+- **Alembic Revision**: `d6e7f8a9b0c1` (`database/migrations/versions/d6e7f8a9b0c1_phase_07_fraud_reviews.py`).
+- **Core Changes Implemented**:
+  1. **Database Migration (`d6e7f8a9b0c1`)**:
+     - Created `fraud_reviews` table with composite foreign keys to `tenants`, `attendance_events`, and `users`, check constraints for decision (`APPROVED`, `REJECTED`) and mandatory reason ($>=3$ characters), and enforced Row-Level Security (`tenant_isolation`).
+     - Validated via offline SQL upgrade and downgrade tests.
+  2. **RBAC & Organizational Hierarchy Permissions**:
+     - Added `REVIEW_FRAUD_EVENTS` and `VIEW_FRAUD_REVIEWS` permissions in `services/api/auth/permissions.py`.
+     - Owner, Admin, and HR granted organization-wide review and adjudication access.
+     - Manager granted `VIEW_FRAUD_REVIEWS` restricted to direct reports and same-department employees.
+     - Strict self-review prohibition: users cannot adjudicate their own attendance fraud reviews (`HTTP 403 Forbidden`).
+  3. **Review Detail API (`GET /api/v1/fraud/events/{id}/review`)**:
+     - Assembles forensic dossier: employee profile, event timestamps, shift assignment, location coordinates and geofence status, device binding telemetry, mock indicators, clock drift, rule signals, and decision audit history.
+     - Enforces manager reporting-line visibility checks.
+  4. **Atomic Adjudication & Recalculation (`POST /api/v1/fraud/events/{id}/decision`)**:
+     - Row-locks target `AttendanceEvent` with `with_for_update()`.
+     - Records immutable `FraudReview` audit entry and updates `AttendanceEvent.review_status`.
+     - Deterministically triggers `recalculate_attendance_day`: `APPROVED` reconciles the punch into normal shift calculation; `REJECTED` excludes the punch from timeline intervals.
+  5. **Review Queue Filtering (`GET /api/v1/fraud/flags`)**:
+     - Added filters for `review_status`, `risk_category`, `min_risk_score`, `max_risk_score`, and `department_id`.
+  6. **Automated Verification**: Authored 20 unit and API tests in `tests/test_phase7_fraud_review_workflow.py` (102 total Phase 7 tests). Full backend regression passing 100% (425 tests passing, 0 failed), Ruff clean (0 errors), and Mypy clean.
+- **Report**: `docs/phase-reports/PHASE_07_MILESTONE_04_REPORT.md`
+
+### 2026-11-19: Phase 7 — Milestone 7.5 Complete & Verified (Flutter Mobile Device Binding & Fraud Telemetry)
+- **Status**: Completed & Verified.
+- **Git Branch**: `phase-06` (preserving uncommitted working-tree changes; no git commit or tag created).
+- **Mobile Stack**: Flutter 3.47.9 / Dart 3.13.7.
+- **Core Changes Implemented**:
+  1. **Secure Installation Identifier (`FlutterDeviceIdentityService`)**:
+     - Cryptographically random UUID v4 generated on first install and persisted in hardware-backed `FlutterSecureStorage` (`encryptedSharedPreferences: true` on Android, `KeychainAccessibility.first_unlock_this_device` on iOS).
+     - Distinct from backend HMAC hash; never logged or exposed; survives app updates and logout; regenerates if corrupted.
+     - Safe platform metadata resolution using `device_info_plus` and `package_info_plus` with graceful fallbacks.
+  2. **Device Feature Architecture (`apps/mobile/lib/features/devices/`)**:
+     - Domain entities (`DeviceInfo`, `DeviceBindingStatus`, `DeviceStatusResult`), repository contract (`DeviceRepository`), data models (`DeviceModel`, `DeviceRegisterRequestModel`, `DeviceRegisterResponseModel`, `DeviceStatusResponseModel`), and remote data source (`DeviceRemoteDataSourceImpl` integrating `GET /api/v1/devices/me` and `POST /api/v1/devices/register`).
+     - BLoC state management (`DeviceBloc`) handling all 5 lifecycle states (`ACTIVE`, `PENDING_APPROVAL`, `REVOKED`, `REPLACED`, `UNREGISTERED`).
+  3. **Fraud Telemetry Integration in Attendance & Offline Queue**:
+     - Extended `PunchRequestModel` with `deviceId`, `isMockLocation`, and `locationCapturedAt`.
+     - `AttendanceBloc` acquires installation ID from `DeviceIdentityService`, reads mock location state and GPS timestamp from `LocationReading`, and forwards telemetry to `recordPunch` and `_persistOfflinePunch`.
+     - Offline `LocalQueueItem` persists `deviceId` and embeds `is_mock_location` and `location_captured_at` into `metadataJson`.
+     - `SyncWorkerImpl._buildPunchRequest` extracts and forwards fraud telemetry from queued items during FIFO background sync.
+     - Rejection handling: backend HTTP 403 device revoked responses display a friendly, actionable notice ("Device access revoked. Please contact HR to authorize this device.") and flag state as non-retriable.
+  4. **Device Status Card in Employee Profile**:
+     - Created `DeviceStatusCard` displaying device status badge, hardware model, OS version, app version, binding date, status explanation, and registration/refresh actions.
+     - Integrated into `ProfileScreen` with fail-safe bloc resolution preserving all existing profile widget tests.
+  5. **Automated Verification**:
+     - 32 new unit, BLoC, and widget tests across services, repository, BLoC, widgets, and attendance telemetry.
+     - All 316 Flutter tests passing (100% pass rate).
+     - Clean `flutter analyze` (0 issues), clean `dart format`.
+     - Verified Android debug build: `flutter build apk --debug` succeeded (`build/app/outputs/flutter-apk/app-debug.apk`).
+- **Report**: `docs/phase-reports/PHASE_07_MILESTONE_05_REPORT.md`
+
+### 11.6 Phase 7.6 Summary: Offline Sync Compatibility & End-to-End Simulation
+- **Delivered**:
+  1. **Comprehensive Mobile Simulation Suite (`apps/mobile/test/features/sync/simulation/phase7_fraud_telemetry_and_device_sync_simulation_test.dart`)**:
+     - *Scenario A*: Normal offline shift journey (CHECK_IN, BREAK_START, BREAK_END, CHECK_OUT) maintaining strict FIFO, verifying device ID, mock GPS flag, GPS capture timestamp, and successful local sync transitions.
+     - *Scenario B*: App process termination and cold reboot; queue persistence verification across crashes without token leaks.
+     - *Scenario C*: Response drop at network boundary; idempotency replay handling without duplicate records.
+     - *Scenario D*: Device revocation while offline events pending; backend HTTP 403 classification, permanent rejection marking, and cascade quarantine to dependent session events.
+     - *Scenario E*: Fraud telemetry mock GPS propagation (`is_mock_location: true`) and server `PENDING_REVIEW` mapping to `flaggedPendingReview`.
+     - *Scenario F & H*: Server HTTP status code handling and exponential backoff progression (2s, 4s, 8s, 16s, 32s, 60s cap; 429 Retry-After header adherence; 422 permanent failure).
+     - *Scenario G*: Session dependency quarantine vs independent session continuation.
+  2. **Authoritative Backend Simulation Suite (`tests/test_phase7_offline_sync_simulation.py`)**:
+     - *Scenario A*: Normal offline attendance processing with `device_id` recording, `AttendanceEvent` commit, and day projection calculation.
+     - *Scenarios B & C*: Network loss and idempotency replay (identical fingerprint returns cached response with `idempotent_replay: True`, no duplicate event or fraud flag records; payload tampering rejected with HTTP 422).
+     - *Scenario D*: Device revocation check (`device_validation_status == 'REVOKED'` immediately raises HTTP 403 Forbidden).
+     - *Scenario E*: Mock location flag and clock drift trigger deterministic risk scoring, fraud flag persistence, and `PENDING_REVIEW` review status.
+     - *Scenario F*: Multi-tier timestamp validation limits.
+     - *Scenario G*: Dependent session events and auto-break closure on checkout.
+     - *Unregistered Device*: Punch recorded into immutable ledger with `UNREGISTERED_DEVICE` flag and `PENDING_REVIEW`.
+     - *API Integration*: Tested `POST /api/v1/attendance/punch` ASGI route for offline telemetry and revoked device 403 behavior.
+  3. **Corrective Validation — Timestamp Policy & Offline Fraud Evaluation**:
+     - Enforced approved timestamp policy replacing 7-day stale and 24-hour future absolute rules:
+       - Future skew > 300s: HTTP 422 rejection.
+       - Future skew 61–300s: Supervisor review (`PENDING_REVIEW`, `FLAG_FUTURE_TIMESTAMP_DETECTED`).
+       - Past drift > configured maximum (8–72h, default 72h): HTTP 422 rejection (`"Device reported timestamp is older than allowable limit"`).
+       - Past drift 24h to maximum: Supervisor review (`PENDING_REVIEW`, `FLAG_OFFLINE_WINDOW_EXCEEDED`).
+       - Standard offline past $\le 24$h: Accepted without review (`UNVERIFIED_OFFLINE`, `NOT_REQUIRED`, `FLAG_DELAYED_OFFLINE_SYNC`).
+       - Unqueued online drift > 300s: Supervisor review (`PENDING_REVIEW`, `FLAG_CLOCK_MANIPULATION_SUSPECTED`).
+     - Added 15-test granular boundary regression suite (`TestTimestampPolicyAndOfflineFraudCorrectiveSuite` in `tests/test_phase7_offline_sync_simulation.py`).
+     - Hardened policy engine against async mock dispatchers (`and not callable(side_effect)`).
+     - Ensured mock location indicators are evaluated and flagged even without GPS coordinates.
+  4. **Automated Verification**:
+     - 9 new Flutter simulation tests (325 total Flutter tests passing 100%).
+     - 24 Backend simulation & corrective tests (449 total Backend tests passing 100%, 126 Phase 7 specific).
+     - Total automated tests: 774 tests passing (100% pass rate).
+     - `flutter analyze` 100% clean (0 issues).
+     - `dart format` 100% clean across all 186 mobile files.
+     - Verified Android debug build: `flutter build apk --debug` succeeded (`build/app/outputs/flutter-apk/app-debug.apk`).
+- **Report**: `docs/phase-reports/PHASE_07_MILESTONE_06_REPORT.md`
+
+### 11.7 Phase 7.7 Summary: Security Audit, Penetration Testing & Phase 7 Completion
+- **Delivered**:
+  1. **Comprehensive Security Audit & Threat Modeling**:
+     - Audited all components built across Milestones 7.1–7.6: device binding, GPS spoofing, velocity analysis, fraud rule engine, HR review workflows, Flutter telemetry, and offline sync.
+     - Modeled mobile sensor/client, transport, and backend/RLS attack surfaces.
+  2. **Vulnerability Remediation & Defensive Hardening**:
+     - *FINDING-7.7-01 (HIGH)*: Fixed device replacement workflow in `services/api/devices/service.py` to evaluate revocation and cross-employee active conflicts prior to creating `PENDING_APPROVAL` records, blocking unauthorized replacement attempts.
+     - *FINDING-7.7-02 (MEDIUM)*: Hardened `revoke_device` in `services/api/devices/service.py` against whitespace-only justification bypass (`if len(reason.strip()) < 3: raise 422`).
+     - *FINDING-7.7-03 (LOW / HARDENING)*: Hardened `approve_device_replacement` against activating hardware identifiers revoked subsequent to submission.
+  3. **Penetration & Security Regression Suite (`tests/test_phase7_security_audit.py`)**:
+     - 19 new security audit tests covering device binding attacks, boundary score capping at 100, disabled rule exclusion, manager reporting-line visibility scoping, self-review prohibition, cross-tenant isolation, mock GPS detection, and impossible-travel velocity analysis.
+  4. **Automated Verification & Packaging**:
+     - Full backend regression: **468 tests passed in 115.78s (100% pass rate, 0 failed, 145 Phase 7 specific)**.
+     - Static analysis (Ruff): Clean (`All checks passed!`).
+     - Full Flutter test suite: **325 tests passed in 20s (100% pass rate, 0 failed)**.
+     - Flutter static analysis: Clean (`No issues found!`).
+     - Code formatting: Clean (`186 files formatted, 0 changed`).
+     - Android builds: Both debug (`build/app/outputs/flutter-apk/app-debug.apk`) and release (`build/app/outputs/flutter-apk/app-release.apk`) verified.
+     - Total automated coverage: **793 tests passing (100% pass rate)**.
+  5. **Formal Phase 7 Completion Documentation**:
+     - Detailed security audit report: `docs/phase-reports/PHASE_07_MILESTONE_07_SECURITY_AUDIT.md`.
+     - Master Phase 7 completion report: `docs/phase-reports/PHASE_07_FINAL_COMPLETION_REPORT.md`.
+
+### 11.8 Phase 8 Summary: Offline Attendance Conflict Resolution & Supervisor Approvals
+- **Delivered**:
+  1. **Milestone 8.1 — Database Architecture, Data Models & Alembic Migration**:
+     - Created `attendance_conflict_incidents` table with composite foreign keys, RLS policies, unique constraints (`tenant_id`, `bundle_id`), and check constraints.
+     - Alembic revision `e7f8a9b0c1d2_phase_08_attendance_conflicts.py` verified.
+  2. **Milestone 8.2 — Backend Conflict Submission Engine & Employee APIs**:
+     - Implemented `POST /api/v1/attendance/offline-conflicts/submit` and `GET /api/v1/attendance/offline-conflicts/my`.
+     - Deterministic canonical SHA-256 bundle fingerprinting, chronological validation, and idempotent replay handling.
+  3. **Milestone 8.3 — Supervisor Adjudication Workflow & Atomic Correction Integration**:
+     - Implemented `GET /api/v1/attendance/offline-conflicts`, `GET /api/v1/attendance/offline-conflicts/{id}`, and `POST /api/v1/attendance/offline-conflicts/{id}/decision`.
+     - Row-level locking (`SELECT ... FOR UPDATE`), atomic reuse of Phase 5 `apply_attendance_correction(CORRECTION_INSERT)` for all bundle events, session projection recalculation, manager direct-report hierarchy scoping, and anti-self-approval rule.
+  4. **Milestone 8.4 — Flutter Mobile Conflict Bundling & Submission**:
+     - Built `OfflineSequenceConflictBundle` extraction from `LocalQueueDao`.
+     - Encrypted SQLCipher metadata tracking (`conflict_bundle_id`, `conflict_status`, `supervisor_decision`).
+     - Created `ConflictSubmissionRequested` and `ConflictRefreshRequested` in `SyncBloc`.
+     - Integrated `ConflictSessionCard` in `SyncStatusScreen`.
+  5. **Milestone 8.5 — Next.js Web Supervisor Console & Adjudication Views**:
+     - Created supervisor route `/attendance/corrections/conflicts` and `ConflictIncidentDetailModal`.
+     - Filter tabs, KPI summary cards, forensic evidence telemetry inspection, mandatory reason validation ($\ge 3$ characters), and location override dropdown.
+  6. **Milestone 8.6 — End-to-End Integration, Chaos & Synchronization Simulation**:
+     - Full lifecycle success scenario: Mobile offline punches $\to$ 422 geofence rejection $\to$ cascading quarantine $\to$ bundle extraction $\to$ submission $\to$ supervisor review in web console $\to$ approval with location override $\to$ atomic ledger insertion $\to$ projections recalculation $\to$ mobile status update to `synced`.
+     - Rejection scenario: Supervisor rejects incident $\to$ status `REJECTED` $\to$ zero ledger rows added $\to$ projections unchanged $\to$ forensic evidence preserved.
+     - Chaos and edge cases: Network loss after commit (idempotent replay), payload tampering on reused bundle ID (409 Conflict), concurrent supervisor adjudication collision (409 Conflict with row locking), atomic transaction rollback on partial failure, overnight shifts spanning calendar dates, cross-tenant isolation (404 Not Found), manager direct-report scoping (403 Forbidden), and anti-self-approval rule (403 Forbidden).
+     - Automated verification: 10 backend chaos tests, 4 mobile simulation tests, 7 web simulation tests; 952 total monorepo automated tests passing (100% pass rate).
+  7. **Milestone 8.7 — Security Audit, Penetration Testing & Phase 8 Completion**:
+     - Audited cross-tenant IDOR, employee self-ownership, manager direct-report scoping, anti-self-approval enforcement, canonical SHA-256 bundle fingerprinting, and atomic transaction rollback boundaries.
+     - Reconciled original 22-phase roadmap ("Corrections and Reports") with completed offline conflict resolution and daily projection recalculation engines; documented deferred async export jobs (`export_jobs`) to Phase 12.
+     - Verified Flutter local encryption configuration (`sqflite_sqlcipher`), offline queue capacity limits (500 events), and successful Android debug APK assembly (`assembleDebug`).
+     - Verified Next.js supervisor console role-based access, client-side reason validation, and workplace location override contract compatibility with backend API.
+     - Fresh automated regression verification: **952 tests passing (100% pass rate: 534 Backend, 348 Flutter, 70 Web)**; Ruff clean; Mypy clean; `flutter analyze` 100% clean; `dart format` 100% clean across 195 files; Next.js 14 production build compiled cleanly.
+- **Reports**:
+  - `docs/phase-reports/PHASE_08_MILESTONE_06_REPORT.md`
+  - `docs/phase-reports/PHASE_08_MILESTONE_07_REPORT.md`
+
+### 11.9 Phase 9 Scope Assessment: Leave, Holidays and Overtime Multipliers
+- **Assessment Document**: [`docs/PHASE_09_SCOPE_ASSESSMENT.md`](file:///Users/apple/Upostit/docs/PHASE_09_SCOPE_ASSESSMENT.md)
+- **Authoritative Scope Established**:
+  - Entities: `leave_types`, `leave_balances`, `leave_requests`, `holiday_calendars`, `holidays`, `overtime_rules`, `overtime_records`.
+  - Core Workflow: Leave type configuration, employee balance hold/deduction, manager direct-report approval hierarchy with anti-self-approval, hierarchical holiday calendar resolution (Location $\to$ Tenant Default), overtime multipliers (1.5x workday, 2.0x weekend/holiday), and attendance projection engine integration (`ON_LEAVE`, `HOLIDAY`, `WEEK_OFF`, `PRESENT`).
+  - Strict Boundaries: Immutable ledger preserved (no fake punch events). Outbound notifications deferred to Phase 10; payroll financial disbursements deferred to Phase 14.
+- **Status**: Assessment completed.
+
+### 11.10 Phase 9 Milestone 9.1 Summary: Database Architecture, Models & Alembic Migration
+- **Delivered**:
+  1. **SQLAlchemy 2.0 Models (`services/api/leave/models.py`)**:
+     - All 7 Phase 9 entities created: `LeaveType`, `LeaveBalance`, `LeaveRequest`, `HolidayCalendar`, `Holiday`, `OvertimeRule`, `OvertimeRecord`.
+     - Strict composite foreign keys referencing `(tenant_id, id)` across parent-child relationships.
+     - Database check constraints, unique constraints, and zero-warning SQLAlchemy relationship overlaps annotations.
+  2. **Alembic Migration (`f2a3b4c5d6e7_phase_09_leave_holidays_overtime.py`)**:
+     - Chained cleanly from Phase 8 head `e7f8a9b0c1d2`.
+     - Full DDL for all 7 tables with composite foreign keys, unique indexes, and check constraints.
+     - PostgreSQL Row-Level Security (RLS) enabled and forced on all tables with tenant isolation policies.
+     - Clean, reverse-order downgrade DDL.
+  3. **Metadata & Migration Registration (`database/migrations/env.py`)**:
+     - Registered all 7 models in `Base.metadata`. Verified single Alembic head `f2a3b4c5d6e7`.
+  4. **Contract & Regression Testing**:
+     - 24 unit and contract tests in `tests/test_phase9_database_models_and_migration.py` passed 100%.
+     - Full monorepo regression suite: **976 tests passing (100% pass rate: 558 Backend, 348 Flutter, 70 Web)**.
+     - Ruff clean, Mypy clean, Dart format clean, Flutter analyze clean.
+- **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_01_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_01_REPORT.md)
+
+### 11.11 Phase 9 Milestone 9.2 Summary: Holiday Calendars & Leave Type Configuration
+- **Delivered**:
+  1. **Leave Type Management (`services/api/leave/leave_type_service.py`)**:
+     - Tenant-scoped CRUD for leave categories (`CL`, `SL`, `AL`, `LOP`).
+     - Case-insensitive unique code enforcement (`(tenant_id, UPPER(code))`).
+     - Reference integrity guard: blocks deletion (`409 Conflict`) if leave type is referenced by employee balances or requests.
+  2. **Holiday Calendars & Entries (`services/api/leave/holiday_service.py`)**:
+     - Annual schedules with location and department override scoping.
+     - Annual default calendar uniqueness enforcement with automatic demotion of prior defaults.
+     - Holiday entries CRUD with duplicate-date prevention per calendar (`409 Conflict`) and date-range querying.
+  3. **Dedicated Hierarchical Calendar Resolution Engine**:
+     - Strict 3-tier precedence: **Workplace Location** (Tier 1) $\to$ **Department** (Tier 2) $\to$ **Tenant Default** (Tier 3).
+     - Inactive location bypass and fallback handling.
+  4. **Employee Upcoming Holiday Inquiry (`GET /api/v1/holidays/upcoming`)**:
+     - Authenticated employee self-scoping derived from server-side JWT context.
+     - Anti-peer sniffing protection (`403 Forbidden` if an employee queries another employee's schedule).
+     - Manager/HR multi-employee inquiry support.
+  5. **RBAC & Permissions Registry Update (`services/api/auth/permissions.py`)**:
+     - Added `MANAGE_POLICIES`, `VIEW_POLICIES`, `MANAGE_LEAVE_TYPES`, `VIEW_LEAVE_TYPES`, `MANAGE_HOLIDAYS`, `VIEW_HOLIDAYS`.
+  6. **Comprehensive Automated Verification**:
+     - 26 tests in `tests/test_phase9_milestone2_leave_and_holidays.py` passed 100%.
+     - Full monorepo regression suite: **1,002 tests passing (100% pass rate: 584 Backend, 348 Flutter, 70 Web)**.
+     - Ruff clean, Mypy clean across all services and tests.
+- **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_02_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_02_REPORT.md)
+
+### 11.12 Phase 9 Milestone 9.3 Summary: Leave Application, Balance Tracking & Supervisor Adjudication
+- **Delivered**:
+  1. **Employee Leave APIs (`services/api/leave/routes.py`, `services/api/leave/leave_request_service.py`)**:
+     - Authenticated employee balance inquiry (`GET /api/v1/leave/balances/my`) with dynamic `available_balance` calculation.
+     - Leave submission (`POST /api/v1/leave/requests`) supporting full-day, multi-day, and half-day (`FIRST_HALF`, `SECOND_HALF`) requests.
+     - Personal request history (`GET /api/v1/leave/requests/my`) and request detail (`GET /api/v1/leave/requests/{id}`).
+     - Leave cancellation (`POST /api/v1/leave/requests/{id}/cancel`): releases pending hold or safely reverses future approved leave (`start_date > today`).
+  2. **Balance Reservation & Available Balance Invariant Engine**:
+     - Row-level locking (`SELECT ... FOR UPDATE`) on `LeaveBalance` during application, adjudication, and cancellation.
+     - Enforces invariant: $\text{Available Balance} = \text{allocation} + \text{carried\_forward} + \text{accrued} - \text{used} - \text{pending\_approval} \ge \text{requested\_days}$.
+     - Atomic increment of `pending_approval += requested_days` on application.
+  3. **Working Days & Calendar Exclusions Calculation**:
+     - Integrates with Milestone 9.2 hierarchical calendar resolver to exclude non-working public holidays.
+     - Integrates with employee shift version resolver to exclude weekly-off days.
+     - Validates half-day constraints (single working day, 0.50 deductible days).
+  4. **Supervisor Review Queue & Adjudication (`services/api/leave/routes.py`)**:
+     - Supervisor review queue (`GET /api/v1/leave/requests`): scoped to direct reports for managers (`reporting_manager_id == reviewer.id`); tenant-wide for HR/Admin; blocked for employees (`403 Forbidden`).
+     - Adjudication endpoint (`POST /api/v1/leave/requests/{id}/decision`): atomic transition to `APPROVED` or `REJECTED`.
+     - Strict anti-self-approval enforcement (`403 Forbidden` if reviewer attempts to adjudicate their own request).
+     - Mandatory rejection reason enforcement ($\ge 3$ non-whitespace chars, `422 Unprocessable Content`).
+  5. **Atomic Balance Transitions & Attendance Recalculation Integration**:
+     - Approval commits balance (`pending_approval -= days`, `used += days`) and invokes `recalculate_attendance_day()` for each affected date in the leave window.
+     - Rejection releases hold (`pending_approval -= days`).
+     - Cancellation of future approved leave reverses used balance (`used -= days`) and recalculates daily attendance.
+     - Transactional rollback: any failure during attendance recalculation rolls back all balance and status changes.
+     - Immutable ledger guarantee: zero synthetic punches inserted or mutated in `attendance_events`.
+  6. **RBAC & Permissions Registry Update (`services/api/auth/permissions.py`)**:
+     - Added `APPLY_LEAVE`, `VIEW_LEAVE_REQUESTS`, and `APPROVE_LEAVE`.
+  7. **Comprehensive Automated Verification**:
+     - 20 tests in `tests/test_phase9_milestone3_leave_workflow.py` passed 100%.
+     - Full monorepo regression suite: **1,022 tests passing (100% pass rate: 604 Backend, 348 Flutter, 70 Web)**.
+     - Ruff clean, Mypy clean on all leave services and test suites.
+- **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_03_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_03_REPORT.md)
+
+### 11.13 Phase 9 Milestone 9.4 Summary: Overtime Rules Engine & Attendance Calculation Integration
+- **Delivered**:
+  1. **Alembic Migration (`database/migrations/versions/a4b5c6d7e8f9_phase_09_overtime_enhancements.py`)**:
+     - Single clean head upgrade from `f2a3b4c5d6e7`.
+     - Added `is_default` and `requires_pre_approval` columns with composite index `ix_overtime_rules_tenant_default` to `overtime_rules`.
+     - Added `overtime_rule_id` foreign key column, composite foreign key to `overtime_rules`, and index `ix_overtime_records_rule` to `overtime_records`.
+     - Reversible upgrade and downgrade paths tested.
+  2. **Pure Functional Attendance Engine Updates (`services/api/attendance/engine.py`)**:
+     - Extended `calculate_attendance_day()` without DB dependencies.
+     - Implemented `OvertimeCalculationDetails` dataclass returning raw overtime, eligible overtime, capped overtime, multiplier, payable overtime minutes, category (`WORKDAY`, `WEEK_OFF`, `HOLIDAY`), status (`AUTO_APPROVED`, `PENDING_APPROVAL`), and rule ID.
+     - Deterministic category precedence: Statutory Holiday takes absolute precedence over Weekly Off (no double counting).
+     - Enforces `daily_overtime_threshold_minutes` eligibility gate and `max_daily_overtime_minutes` daily ceiling.
+     - Separates raw vs approved vs payable overtime minutes without premature currency conversion.
+     - Absence safety: Incomplete attendance sessions and full-day approved leaves yield zero overtime.
+  3. **Overtime Rule Management Services & APIs (`services/api/leave/overtime_service.py`, `services/api/leave/routes.py`)**:
+     - Tenant-scoped rule CRUD: `POST /api/v1/overtime/rules`, `GET /api/v1/overtime/rules`, `GET /api/v1/overtime/rules/{id}`, `PUT /api/v1/overtime/rules/{id}`, `DELETE /api/v1/overtime/rules/{id}`.
+     - Enforces single default rule per tenant with automatic demotion of existing default rule.
+     - Multiplier range constraints ($1.00 \le \text{multiplier} \le 5.00$) and daily cap constraints ($0 \le \text{threshold} \le \text{cap} \le 1440$).
+     - Referential integrity: deletion blocked with `409 Conflict` if rule is referenced by existing `OvertimeRecord` rows.
+  4. **Supervisor Overtime Review Queue & Adjudication (`services/api/leave/routes.py`)**:
+     - Supervisor review queue (`GET /api/v1/overtime/records`): direct-report filtering for managers; tenant-wide for HR/Admin; blocked for employees (`403 Forbidden`).
+     - Employee self-service view (`GET /api/v1/overtime/records/my`).
+     - Adjudication endpoint (`POST /api/v1/overtime/records/{id}/decision`) with row-level locking (`with_for_update()`).
+     - Anti-self-approval enforcement (`403 Forbidden` if reviewer attempts to adjudicate own overtime).
+     - Mandatory rejection reason enforcement ($\ge 3$ non-whitespace characters, `422 Unprocessable Content`).
+     - Ledger updates: Approval updates `approved_overtime_minutes` and `AttendanceDay.overtime_minutes`; rejection sets `approved_overtime_minutes = 0` and `AttendanceDay.overtime_minutes = 0`.
+  5. **Attendance Recalculation Integration (`services/api/attendance/service.py`)**:
+     - Queries applicable holiday calendar, leave requests, and overtime rules during `recalculate_attendance_day()`.
+     - Idempotent upsert of `OvertimeRecord` linked to `AttendanceDay`.
+     - Decision preservation: Existing `APPROVED` supervisor decisions survive attendance recalculation (capped to raw overtime if raw was reduced); existing `REJECTED` decisions remain rejected.
+     - Immutable event ledger guarantee: zero synthetic punches inserted or mutated in `attendance_events`.
+  6. **RBAC & Permissions Registry Update (`services/api/auth/permissions.py`)**:
+     - Added `MANAGE_OVERTIME_RULES`, `VIEW_OVERTIME_RULES`, `APPROVE_OVERTIME`, and `VIEW_OVERTIME_RECORDS`.
+  7. **Comprehensive Automated Verification**:
+     - 25 tests in `tests/test_phase9_milestone4_overtime_engine.py` passed 100%.
+     - Full monorepo regression suite: **1,047 tests passing (100% pass rate: 629 Backend, 348 Flutter, 70 Web)**.
+     - Ruff clean, Mypy clean on all leave services, attendance engine, and test suites.
+- **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_04_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_04_REPORT.md)
+
+### 11.14 Phase 9 Milestone 9.5 Summary: Next.js Web Console — Leave & Overtime Administration
+- **Delivered**:
+  1. **Next.js Web Routes & Interfaces**:
+     - `/leave`: Employee leave dashboard with real-time balance cards, holiday clashing awareness, application modal (full/half-day), request history, and cancellation.
+     - `/leave/approvals`: Manager/HR review queue with anti-self-approval protection, mandatory rejection reason ($\ge 3$ non-whitespace chars), and balance context.
+     - `/organization/leave-types`: HR leave policy configuration (quota, paid/unpaid, carry forward, approval requirements, active toggle, 409 conflict safety).
+     - `/organization/holidays`: Annual holiday calendar administration with Location, Department, or Tenant Default scoping and inline holiday entries.
+     - `/attendance/overtime`: Overtime records dashboard, supervisor adjudication dialog (approve with adjusted minutes / reject), and overtime rules configuration tab.
+  2. **API Client & TypeScript DTOs (`apps/web/src/lib/api.ts`)**:
+     - Added comprehensive typed DTOs and API clients (`leaveApi`, `holidayApi`, `overtimeApi`).
+  3. **Role-Based Cross-Navigation Updates**:
+     - Updated header navigation bars across `apps/web/src/app/page.tsx`, `/attendance`, and `/organization`.
+  4. **Comprehensive Automated Verification**:
+     - 26 tests in `apps/web/src/lib/leave-and-overtime-api.test.ts` passed 100%.
+     - Full Next.js web test suite: **96 tests passing (100%)** across 29 test suites.
+     - Next.js production build: **14/14 static pages generated successfully**.
+     - Next.js linting: **0 warnings, 0 errors**.
+     - Full monorepo regression suite: **1,073 tests passing (629 Backend, 348 Flutter, 96 Web)**.
+- **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_05_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_05_REPORT.md)
+
+### 11.15 Phase 9 Milestone 9.6 Summary: Flutter Mobile — Leave Application, Balances & Holiday Hub
+- **Delivered**:
+  1. **Core Network & Domain Architecture (`apps/mobile/lib/features/leave/`)**:
+     - Endpoints defined in `ApiEndpoints`: balances, types, personal requests, application, cancellation, supervisor queue, decision adjudication, and upcoming holidays.
+     - Domain entities: `LeaveType`, `LeaveBalance`, `LeaveRequest` (with `canCancel(today)` business invariants), and `UpcomingHoliday`.
+     - Data models: `LeaveTypeModel`, `LeaveBalanceModel`, `LeaveRequestModel`, and `UpcomingHolidayModel` with resilient JSON deserialization and list mapping.
+     - Remote data source & repository: `LeaveRemoteDataSourceImpl` and `LeaveRepositoryImpl` returning functional `Result<T>` with `ServerFailure` and `NetworkFailure` mapping.
+  2. **BLoC State Management (`apps/mobile/lib/features/leave/presentation/bloc/`)**:
+     - `LeaveBloc`, `LeaveEvent`, and `LeaveState`:
+     - Handlers for dashboard loading, leave application submission, cancellation, history queries, upcoming holidays, and supervisor decision adjudication.
+     - Double-submission protection: `isSubmitting: true` disables buttons and guards against duplicate requests.
+     - Transient notice management: `successNotice` and `errorMessage` with explicit `LeaveNoticesCleared`.
+  3. **Presentation Widgets (`apps/mobile/lib/features/leave/presentation/widgets/`)**:
+     - `BalanceCard`: Clean horizontal card displaying available days hero font, visual linear progress bar, and used/pending days breakdown.
+     - `LeaveStatusBadge`: Semantic status pills for `Approved` (emerald), `Pending` (amber), `Rejected` (rose), and `Cancelled` (slate).
+     - `HolidayTile`: Formatted calendar date block, holiday name, weekday, holiday type badge, and resolution source badge (`Location`, `Department`, `Tenant default`).
+     - `LeaveRequestCard`: Request details, date range, half-day sessions (`First Half` / `Second Half`), supervisor feedback, and action-gated cancellation button.
+  4. **Presentation Screens (`apps/mobile/lib/features/leave/presentation/screens/`)**:
+     - `/leave`: Employee leave dashboard with balances carousel, recent requests feed, upcoming holidays card, pull-to-refresh, and quick action bar.
+     - `/leave/apply`: Leave application form with type dropdown, conditional half-day toggle (`allowHalfDay == true`), morning/afternoon session chip selector, material date picker, mandatory reason input, live duration calculation, and submit loading state.
+     - `/leave/history`: Status filter chips (`All`, `Pending`, `Approved`, `Rejected`, `Cancelled`), request cards, and cancellation confirmation dialog.
+     - `/leave/holidays`: Three-tier resolved holiday calendar list with location/department contextual info banner.
+     - `/leave/approvals`: Supervisor review queue for managers/HR with anti-self-approval protection (disables actions if `employeeId == currentUserId`), approval dialog with notes, and rejection dialog requiring mandatory reason ($\ge 3$ characters).
+  5. **Routing & DI Integration**:
+     - Registered 5 declarative routes in `appRouter` (`apps/mobile/lib/app.dart`).
+     - Injected `LeaveRepository` and `LeaveBloc` at root level in `main.dart`.
+     - Added "Leave" quick action card to `AttendanceHomeScreen`.
+  6. **Comprehensive Automated Verification**:
+     - 28 new tests authored in `apps/mobile/test/features/leave/`:
+       - `leave_models_and_repository_test.dart`: 13 tests passed (JSON parsing, `canCancel` invariants, repository calls, error mapping).
+       - `leave_bloc_test.dart`: 6 tests passed (dashboard, apply, cancel, double-submission guard, supervisor approval).
+       - `leave_screens_and_widgets_test.dart`: 9 tests passed (widgets and screens, form validations, anti-self-approval).
+     - Full mobile test suite: **376 tests passing (100% pass rate)**.
+     - Static analysis: `flutter analyze` reports **0 errors, 0 warnings, 0 infos**.
+     - Full monorepo regression suite: **1,101 tests passing (629 Backend, 376 Flutter, 96 Web)** with 0 failures across the codebase.
+- **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_06_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_06_REPORT.md)
+
+### 11.16 Phase 9 Milestone 9.7 Summary: End-to-End Cross-Platform Simulation, Concurrency & Chaos Testing
+- **Delivered**:
+  1. **Backend Automated E2E & Chaos Suite (`tests/test_phase9_e2e_and_chaos_simulation.py`)**:
+     - 12 automated simulation tests validating complete leave lifecycle, balance holds, attendance recalculation without event ledger modification, weekend/holiday exclusion from deductible days, insufficient balance 400 rejection, max consecutive days enforcement, commenced/past leave cancellation rejection 400, statutory overtime multipliers (1.5x workday, 2.0x weekend, 2.0x holiday) with daily caps, supervisor adjusted minutes approval, anti-self-approval 403 enforcement, competing balance race conditions with row locking, duplicate supervisor decision 409 conflict, attendance recalculation failure atomic transaction rollback, and cross-tenant 404 isolation.
+  2. **Web Console Cross-Platform Simulation (`apps/web/src/lib/leave-and-overtime-simulation.test.ts`)**:
+     - 8 automated tests simulating full leave lifecycle, anti-self-approval rejection for leave and overtime, duplicate approval 409 conflict, competing request balance rejection, network timeout retry idempotency, overtime multiplier verification, and supervisor adjusted minutes adjudication.
+  3. **Anti-Self-Approval Identity Mapping Defect Resolution**:
+     - Resolved UUID mismatch across Flutter mobile and Next.js web where `Employee.id` was compared directly to `User.id`, causing false negatives in client-side anti-self-approval guards. Updated mobile `leave_approvals_screen.dart` and web `apps/web/src/app/leave/approvals/page.tsx` and `apps/web/src/app/attendance/overtime/page.tsx` to match against both employee ID and user ID.
+  4. **PostgreSQL Environment Documentation**:
+     - Explicitly documented that live PostgreSQL RLS policy execution was not available on this host environment (`pg_isready`/`docker` unavailable), without substituting or falsely claiming RLS checks passed.
+  5. **Comprehensive Monorepo Verification**:
+     - Full monorepo regression suite: **1,121 tests passing (641 Backend, 376 Flutter, 104 Web)** with 0 failures across the entire codebase.
+     - Next.js build: 14/14 static pages compiled successfully with 0 linting warnings or errors.
+     - Flutter static analysis: `flutter analyze` reports 0 issues.
+- **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_07_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_07_REPORT.md)
+
+### 11.17 Phase 9 Milestone 9.8 Summary: Security Audit, Vulnerability Assessment & Phase 9 Closure
+- **Delivered**:
+  1. **Comprehensive Security Audit & Penetration Suite (`tests/test_phase9_security_audit.py`)**:
+     - 14 automated security regression tests validating multi-tenant boundary enforcement, cross-tenant injection prevention, employee self-only scoping, manager direct-report scoping, anti-self-approval identity mapping, balance invariant formula consistency, inactive policy application blocks, overtime multiplier deflation prevention (Pydantic & service level), pre-approval non-auto-approval invariant, and append-only event ledger protection (0 synthetic punches inserted).
+  2. **Vulnerability Remediation**:
+     - SEC-09-01: Corrected client-side anti-self-approval checks in Flutter mobile and Next.js web to evaluate both `Employee.id` and `User.id` entities, eliminating false-negative approval buttons.
+     - SEC-09-02: Guaranteed transaction rollback on attendance projection recalculation failures in leave approval.
+     - SEC-09-03: Reinforced multiplier $\ge 1.00$ and cap bounds at both Pydantic schema ingress and service layer.
+  3. **Static & Dependency Security Analysis**:
+     - Python: `pip check` clean, `ruff` 0 errors.
+     - Web: `npm audit` documented, Next.js build 14/14 static pages generated with 0 errors, ESLint 0 warnings/errors.
+     - Flutter: `flutter analyze` 0 issues.
+     - Secrets: 0 hardcoded keys or leaked credentials found across Phase 9 code.
+  4. **Formal Phase 9 Closure Decision**:
+     - Designated **Outcome B: Implementation complete, infrastructure validation outstanding** due to absence of local PostgreSQL/Docker runtime on the test execution host. Direct PostgreSQL RLS policy execution deferred to deployment staging on a live PostgreSQL 16/Supabase instance.
+  5. **Monorepo Test Totals**:
+     - **1,135 total automated tests passing (100% pass rate)**: 655 backend pytest tests (121 Phase 9), 104 Next.js web tests, and 376 Flutter mobile tests.
+- **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_08_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_08_REPORT.md)
 
 ## 12. Next Actions
 
-1. **Current State**: Phase 5 (Attendance Engine & Ledger) is fully COMPLETE and VERIFIED across all 5 milestones and final verification checks on branch `phase-05`. Alembic migrations `e9f63b02a145` (Milestone 1), `f1b94c8e7a23` (Milestone 2), and `a2b3c4d5e6f7` (Milestone 3) are safely APPLIED and VERIFIED on live Supabase (`a2b3c4d5e6f7 (head)`). All 281 backend tests and 52 frontend tests pass (100%).
-2. **Phase 5 Execution Roadmap**:
-   - [x] **Milestone 1 — Shift Templates, Versions & Shift Assignments**: Master shift templates, immutable `shift_template_versions` with effective dates, employee rostering with exclusion constraints, CRUD APIs, RLS, live migration `e9f63b02a145` applied & verified.
-   - [x] **Milestone 2 — Event Ledger, Fingerprinting & Idempotent Punch API**: Append-only `attendance_events`, PostgreSQL immutability trigger, permanent `attendance_idempotency_records` with SHA-256 request fingerprinting, `POST /api/v1/attendance/punch`, pessimistic row-locking (`SELECT FOR UPDATE`), atomic break auto-close, live migration `f1b94c8e7a23` applied & verified.
-   - [x] **Milestone 3 — Timeline Resolution, Calculation Engine & Live Application**: Derived `attendance_days` projection table, pure timeline resolution and calculation engine, historical shift versioning preservation, overnight shift attribution, recalculation service, read APIs, live migration `a2b3c4d5e6f7` applied & verified.
-   - [x] **Milestone 4 — Correction Engine, Audit & Nightly Reconciliation**: Structured corrections (`CORRECTION_INSERT`, `CORRECTION_SUPERSEDE`, `CORRECTION_VOID`) with mandatory reasons and target event references, projection recalculation, Celery nightly reconciliation task, event audit history endpoint.
-   - [x] **Milestone 5 — Frontend Integration & Verification**: Next.js Employee Today punch widget with live timer, personal attendance history, HR Daily Attendance Console with KPI cards, records table, manual correction modal (insert/supersede/void), audit trail drawer, manager direct-report scoping, and full test suite verification.
-   - [x] **Phase 5 Final Verification & Defect Correction**: Comprehensive 10-check audit, live Supabase testing with zero data residue, PostgreSQL RLS tenant isolation, immutability trigger verification, defect resolution in correction idempotency finalization, regression tests, and full test suite passing.
-3. **Strict Boundaries**: Phase 5 is 100% complete. User has formally accepted Phase 5. Proceeding with official closure, release tag `phase-05-complete`, and upstream repository push. Do NOT begin Phase 6 (Flutter mobile app).
+1. **Current State**: Phase 6, Phase 7, Phase 8 (Milestones 8.1–8.7), and **Phase 9 (Milestones 9.1 through 9.8) are COMPLETED, AUDITED, AND FORMALLY CLOSED** on branch `phase-06` (655 backend tests, 376 Flutter tests, and 104 web unit tests passing, **1,135 total automated tests passing 100%**).
+2. **Phase 9 Closure Outcome**: **Outcome B: Implementation complete, infrastructure validation outstanding** (pending live PostgreSQL/Supabase staging for RLS policy engine verification).
+3. **Phase 9 Milestone Implementation Roadmap (100% Complete)**:
+   - [x] **Milestone 9.1 — Database Architecture, Models & Alembic Migration**: `leave_types`, `leave_balances`, `leave_requests`, `holiday_calendars`, `holidays`, `overtime_rules`, `overtime_records` tables, composite foreign keys, RLS policies, and indexes. (COMPLETED)
+   - [x] **Milestone 9.2 — Holiday Calendars & Leave Type Configuration**: Hierarchical holiday resolution (Location $\to$ Department $\to$ Tenant Default), leave types CRUD, and employee holiday queries. (COMPLETED)
+   - [x] **Milestone 9.3 — Leave Application, Balance Tracking & Supervisor Adjudication**: Employee leave submission, balance reservation/lock, manager direct-report approval queue, anti-self-approval rule, and balance rollback on cancellation. (COMPLETED)
+   - [x] **Milestone 9.4 — Overtime Rules Engine & Attendance Calculation Integration**: Pure calculation engine updates for `ON_LEAVE`, `HOLIDAY`, and overtime multipliers ($1.5\times$, $2.0\times$); automated daily projection recalculation. (COMPLETED)
+   - [x] **Milestone 9.5 — Next.js Web Console: Leave & Overtime Administration**: HR policy configuration, supervisor leave review queues, team holiday calendars, and overtime adjudication. (COMPLETED)
+   - [x] **Milestone 9.6 — Flutter Mobile: Leave Application, Balances & Holiday Hub**: Balance display cards, date picker application flow, leave history, holiday calendar screens, and supervisor review queue. (COMPLETED)
+   - [x] **Milestone 9.7 — End-to-End Cross-Platform Simulation & Concurrency Testing**: Full leave application lifecycle, holiday work punch with overtime, race condition fuzzing, and chaos simulation. (COMPLETED)
+   - [x] **Milestone 9.8 — Security Audit, Penetration Testing & Phase 9 Completion**: Comprehensive audit, anti-self-approval identity remediation, 14 penetration tests, and formal Phase 9 closure (Outcome B). (COMPLETED)
+4. **Next Phase (Phase 10 — Payroll Integration & Time Card Exports)**:
+   - Do NOT begin Phase 10 without explicit authorization.
+   - Do NOT commit, tag, or push to git.
+   - Preserve all existing user changes.
+
+

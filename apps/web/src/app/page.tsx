@@ -8,9 +8,15 @@ export default function Home() {
         <div className="logo-badge">
           <div className="logo-dot" />
           <span>Attendance SaaS</span>
-          <span className="badge">Phase 5</span>
+          <span className="badge">Phase 9</span>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+          <Link href="/leave" className="btn btn-secondary btn-sm">
+            🌴 Leave & Balances
+          </Link>
+          <Link href="/attendance/overtime" className="btn btn-secondary btn-sm">
+            ⚡ Overtime
+          </Link>
           <Link href="/organization" className="btn btn-secondary btn-sm">
             🏢 Organization
           </Link>

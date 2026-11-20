@@ -485,7 +485,13 @@ export default function AttendancePage() {
             <Link href="/">Attendance SaaS</Link>
             <span className="badge badge-green">Employee Self-Service</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+            <Link href="/leave" className="btn btn-secondary btn-sm">
+              🌴 Leave & Balances
+            </Link>
+            <Link href="/attendance/overtime" className="btn btn-secondary btn-sm">
+              ⚡ Overtime
+            </Link>
             <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
               {user?.email}
             </span>
@@ -573,7 +579,20 @@ export default function AttendancePage() {
             </span>
           )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <Link href="/leave" className="btn btn-secondary btn-sm">
+            🌴 Leave
+          </Link>
+          <Link href="/attendance/overtime" className="btn btn-secondary btn-sm">
+            ⚡ Overtime
+          </Link>
+          <Link
+            href="/attendance/corrections/conflicts"
+            className="btn btn-secondary btn-sm"
+            style={{ borderColor: "rgba(245, 158, 11, 0.4)", color: "#f59e0b" }}
+          >
+            ⚡ Conflicts
+          </Link>
           <Link href="/organization" className="btn btn-secondary btn-sm">
             🏢 Organization
           </Link>
@@ -748,6 +767,13 @@ export default function AttendancePage() {
         >
           🔍 Corrections Audit Log ({totalCorrections})
         </button>
+        <Link
+          href="/attendance/corrections/conflicts"
+          className="tab-btn"
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+        >
+          ⚡ Offline Conflicts
+        </Link>
         {myProfile && (
           <button
             className={`tab-btn ${activeTab === "my_attendance" ? "active" : ""}`}

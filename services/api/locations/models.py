@@ -3,6 +3,7 @@
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -23,6 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID, ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from services.api.auth.models import User  # noqa: F401
 from services.api.database import Base
 from services.api.employees.models import Employee  # noqa: F401
 from services.api.tenants.models import Tenant  # noqa: F401
@@ -58,6 +60,9 @@ class Location(Base):
     timezone: Mapped[str] = mapped_column(String(50), nullable=False)
     wifi_bssids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     ip_ranges: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    wifi_config_override: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -93,6 +98,9 @@ class Location(Base):
     tenant = relationship("Tenant")
     employee_assignments = relationship(
         "EmployeeLocation", back_populates="location", cascade="all, delete-orphan"
+    )
+    wifi_access_points = relationship(
+        "WorkplaceWifiAccessPoint", back_populates="location", cascade="all, delete-orphan"
     )
 
 
@@ -180,3 +188,81 @@ class EmployeeLocation(Base):
     location = relationship(
         "Location", foreign_keys=[location_id], back_populates="employee_assignments"
     )
+
+
+class WorkplaceWifiAccessPoint(Base):
+    """Represents an authorized Wi-Fi Access Point deployed at a physical workplace location."""
+
+    __tablename__ = "workplace_wifi_access_points"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    location_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    friendly_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    bssid: Mapped[str] = mapped_column(String(17), nullable=False)
+    ssid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "location_id"],
+            ["locations.tenant_id", "locations.id"],
+            name="fk_workplace_wifi_location",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "location_id",
+            "bssid",
+            name="uq_workplace_wifi_location_bssid",
+        ),
+        CheckConstraint(
+            "bssid ~ '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'",
+            name="chk_workplace_wifi_bssid_format",
+        ),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to >= effective_from",
+            name="chk_workplace_wifi_dates",
+        ),
+        Index("ix_workplace_wifi_tenant_location_active", "tenant_id", "location_id", "is_active"),
+        Index("ix_workplace_wifi_tenant_bssid", "tenant_id", "bssid"),
+    )
+
+    # Relationships
+    tenant = relationship("Tenant", overlaps="wifi_access_points")
+    location = relationship(
+        "Location", foreign_keys=[location_id], back_populates="wifi_access_points"
+    )
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+

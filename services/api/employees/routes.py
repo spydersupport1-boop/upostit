@@ -9,6 +9,16 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.attendance.policy_engine import (
+    verify_employee_coordinates,
+    verify_employee_wifi,
+)
+from services.api.attendance.schemas import (
+    EmployeeGeofenceVerifyRequest,
+    EmployeeGeofenceVerifyResponse,
+    EmployeeWifiVerifyRequest,
+    EmployeeWifiVerifyResponse,
+)
 from services.api.auth.dependencies import (
     AuthenticatedContext,
     get_authenticated_context,
@@ -167,6 +177,50 @@ async def get_my_workplaces_endpoint(
         page_size=page_size,
     )
     return EmployeeWorkplaceListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.post(
+    "/me/workplaces/verify-coordinates",
+    response_model=EmployeeGeofenceVerifyResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verify employee coordinates against assigned workplace geofence",
+    dependencies=[Depends(require_permission(Permission.RECORD_PUNCH))],
+)
+async def verify_my_workplace_coordinates_endpoint(
+    req: EmployeeGeofenceVerifyRequest,
+    context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> EmployeeGeofenceVerifyResponse:
+    """Performs server-authoritative PostGIS geofence evaluation for an assigned workplace."""
+    return await verify_employee_coordinates(
+        session=session,
+        tenant_id=context.tenant.id,
+        user_id=context.user.id,
+        req=req,
+    )
+
+
+@router.post(
+    "/me/workplaces/verify-wifi",
+    response_model=EmployeeWifiVerifyResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verify employee Wi-Fi connection against assigned workplace",
+    dependencies=[Depends(require_permission(Permission.RECORD_PUNCH))],
+)
+async def verify_my_workplace_wifi_endpoint(
+    req: EmployeeWifiVerifyRequest,
+    context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> EmployeeWifiVerifyResponse:
+    """Performs server-authoritative Wi-Fi access point matching for an assigned workplace."""
+    return await verify_employee_wifi(
+        session=session,
+        tenant_id=context.tenant.id,
+        user_id=context.user.id,
+        req=req,
+    )
+
+
 
 
 # ---------------------------------------------------------------------------

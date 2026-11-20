@@ -21,6 +21,11 @@ from services.api.attendance.models import (
     ShiftAssignment,
     ShiftTemplate,
     ShiftTemplateVersion,
+    TenantAttendancePolicy,
+)
+from services.api.attendance.policy_engine import (
+    evaluate_punch_policy,
+    get_active_tenant_policy,
 )
 from services.api.attendance.schemas import (
     AttendanceDayListResponse,
@@ -41,6 +46,8 @@ from services.api.attendance.schemas import (
     ShiftVersionResponse,
 )
 from services.api.employees.models import Employee
+from services.api.fraud.engine import evaluate_and_persist_attendance_risk
+from services.api.fraud.service import evaluate_attendance_fraud_evidence
 from services.api.locations.models import Location
 from services.api.tenants.models import Tenant
 
@@ -563,12 +570,27 @@ async def assign_shift_to_employee(
 async def list_shift_assignments(
     session: AsyncSession,
     tenant_id: uuid.UUID,
+    user_id: uuid.UUID | None = None,
+    user_role: str | None = None,
     employee_id: uuid.UUID | None = None,
     shift_template_id: uuid.UUID | None = None,
     effective_date: date | None = None,
     limit: int = 50,
 ) -> list[ShiftAssignmentResponse]:
     """Lists employee shift assignments with optional filtering by employee, shift, or date."""
+    target_emp_id = employee_id
+    if user_role and user_role.lower() == "employee":
+        user_emp = (
+            await session.execute(
+                select(Employee.id).where(
+                    Employee.tenant_id == tenant_id, Employee.user_id == user_id
+                )
+            )
+        ).scalar_one_or_none()
+        if user_emp is None:
+            return []
+        target_emp_id = user_emp
+
     query = (
         select(ShiftAssignment, ShiftTemplate.name, ShiftTemplate.code)
         .join(
@@ -579,8 +601,8 @@ async def list_shift_assignments(
         .where(ShiftAssignment.tenant_id == tenant_id)
     )
 
-    if employee_id is not None:
-        query = query.where(ShiftAssignment.employee_id == employee_id)
+    if target_emp_id is not None:
+        query = query.where(ShiftAssignment.employee_id == target_emp_id)
     if shift_template_id is not None:
         query = query.where(ShiftAssignment.shift_template_id == shift_template_id)
     if effective_date is not None:
@@ -598,6 +620,12 @@ async def list_shift_assignments(
 
     items: list[ShiftAssignmentResponse] = []
     for sa, shift_name, shift_code in rows:
+        version = await resolve_shift_version_for_date(
+            session=session,
+            tenant_id=tenant_id,
+            shift_template_id=sa.shift_template_id,
+            target_date=effective_date or sa.effective_from,
+        )
         items.append(
             ShiftAssignmentResponse(
                 id=sa.id,
@@ -609,6 +637,15 @@ async def list_shift_assignments(
                 effective_to=sa.effective_to,
                 created_at=sa.created_at,
                 updated_at=sa.updated_at,
+                start_time=version.start_time if version else None,
+                end_time=version.end_time if version else None,
+                grace_period_minutes=version.grace_period_minutes if version else 15,
+                break_duration_minutes=version.break_duration_minutes if version else 0,
+                is_overnight=version.is_overnight if version else False,
+                is_flexible=version.is_flexible if version else False,
+                weekly_off_days=version.weekly_off_days
+                if version and version.weekly_off_days
+                else [],
             )
         )
     return items
@@ -757,6 +794,9 @@ def compute_request_fingerprint(payload: PunchRequest, employee_id: uuid.UUID) -
        - latitude: string representation of Decimal if provided, else None
        - longitude: string representation of Decimal if provided, else None
        - accuracy_meters: string representation of Decimal if provided, else None
+       - wifi_bssid: normalized uppercase colon-separated BSSID if provided, else None
+       - wifi_ssid: trimmed str if provided, else None
+       - wifi_signal_status: str
        - device_id: trimmed str if provided, else None
        - metadata: dictionary of arbitrary client metadata
     2. Builds a dictionary and serializes it to JSON with sorted keys and compact separators (',', ':').
@@ -781,9 +821,50 @@ def compute_request_fingerprint(payload: PunchRequest, employee_id: uuid.UUID) -
         "location_id": str(payload.location_id) if payload.location_id else None,
         "longitude": str(payload.longitude) if payload.longitude is not None else None,
         "metadata": payload.metadata or {},
+        "wifi_bssid": payload.wifi_bssid.strip().upper().replace("-", ":")
+        if payload.wifi_bssid
+        else None,
+        "wifi_signal_status": str(payload.wifi_signal_status)
+        if payload.wifi_signal_status
+        else "AVAILABLE",
+        "wifi_ssid": payload.wifi_ssid.strip() if payload.wifi_ssid else None,
     }
     canonical_json = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+def get_tenant_offline_window_bounds(
+    active_policy: TenantAttendancePolicy | None,
+) -> tuple[int, int]:
+    """Resolves standard offline window and tenant-configured maximum offline window.
+
+    - Standard offline window: 24 hours.
+    - Tenant-configurable window: 8 to 72 hours (defaults to 72 hours if unconfigured).
+    - If tenant configures a maximum window < 24 hours (e.g. 12h), the standard window is clamped to it.
+    """
+    configured_max = 72
+
+    if active_policy is not None:
+        for cfg in (
+            getattr(active_policy, "fallback_policy", None),
+            getattr(active_policy, "gps_config", None),
+        ):
+            if isinstance(cfg, dict):
+                val = (
+                    cfg.get("max_offline_sync_age_hours")
+                    or cfg.get("max_offline_hours")
+                    or cfg.get("offline_window_hours")
+                )
+                if val is not None:
+                    try:
+                        int_val = int(val)
+                        configured_max = max(8, min(72, int_val))
+                        break
+                    except (ValueError, TypeError):
+                        pass
+
+    standard_window = min(24, configured_max)
+    return standard_window, configured_max
 
 
 async def record_punch(
@@ -898,6 +979,24 @@ async def record_punch(
         session.add(idem_record)
         await session.flush()
 
+    # 4.5. Tenant Attendance Policy Engine Evaluation
+    active_policy = await get_active_tenant_policy(session, tenant_id)
+    policy_outcome = await evaluate_punch_policy(
+        session=session,
+        tenant_id=tenant_id,
+        employee_id=target_employee_id,
+        event_type=payload.event_type,
+        location_id=payload.location_id,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        accuracy_meters=payload.accuracy_meters,
+        device_reported_at=payload.device_reported_at,
+        active_policy=active_policy,
+        wifi_bssid=payload.wifi_bssid,
+        wifi_ssid=payload.wifi_ssid,
+        wifi_signal_status=payload.wifi_signal_status,
+    )
+
     # 5. Timestamp Validation & Clock Drift Metrics
     server_received_at = datetime.now(UTC)
     effective_at = server_received_at
@@ -913,32 +1012,98 @@ async def record_punch(
             dev_time = dev_time.replace(tzinfo=UTC)
         dev_time_utc = dev_time.astimezone(UTC)
 
-        if dev_time_utc > server_received_at + timedelta(hours=24):
+        # 1. Future timestamp validation:
+        # > 300 seconds into future: Strict rejection with HTTP 422
+        future_seconds = (dev_time_utc - server_received_at).total_seconds()
+        if future_seconds > 301.0:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Device reported timestamp is implausibly in the future (> 24 hours).",
-            )
-        if dev_time_utc < server_received_at - timedelta(days=7):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Device reported timestamp is older than allowable limit of 7 days.",
+                detail="Device reported timestamp is implausibly in the future (> 300 seconds).",
             )
 
-        drift = abs((server_received_at - dev_time_utc).total_seconds())
+        # 2. Maximum offline acceptance window validation:
+        # > configured maximum: Strict rejection with HTTP 422
+        standard_window_hours, max_offline_hours = get_tenant_offline_window_bounds(active_policy)
+        past_seconds = (server_received_at - dev_time_utc).total_seconds()
+
+        if past_seconds > (max_offline_hours * 3600 + 1.0):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Device reported timestamp is older than allowable limit (exceeds allowable offline limit of {max_offline_hours} hours).",
+            )
+
+        # 3. Clock drift metrics and review classification
+        drift_delta = past_seconds
+        drift = abs(drift_delta)
         clock_drift_seconds = Decimal(str(round(drift, 3)))
 
-        if drift > 300:
+        is_offline_sync = bool(
+            (payload.metadata or {}).get("offline_queued")
+            or (payload.metadata or {}).get("is_offline_sync")
+            or (payload.metadata or {}).get("offline_queued_at")
+        )
+
+        flags_list = list((payload.metadata or {}).get("flags", []))
+
+        if future_seconds > 60:
+            # Future timestamp between 60s and 300s -> Supervisor review required
             timestamp_verification_status = "SUSPICIOUS_CLOCK_DRIFT"
             review_status = "PENDING_REVIEW"
+            flags_list.append("FLAG_FUTURE_TIMESTAMP_DETECTED")
+        elif past_seconds > (standard_window_hours * 3600 + 5.0):
+            # Past timestamp between standard window (24h) and configured maximum (up to 72h) -> Supervisor review required
+            timestamp_verification_status = "UNVERIFIED_OFFLINE"
+            review_status = "PENDING_REVIEW"
+            flags_list.append("FLAG_OFFLINE_WINDOW_EXCEEDED")
+        elif past_seconds > 300:
+            if is_offline_sync:
+                # Legitimate delayed offline sync within standard window (<= 24h)
+                timestamp_verification_status = "UNVERIFIED_OFFLINE"
+                review_status = "NOT_REQUIRED"
+                flags_list.append("FLAG_DELAYED_OFFLINE_SYNC")
+            else:
+                # Online punch with unexplained past clock drift > 300s
+                timestamp_verification_status = "SUSPICIOUS_CLOCK_DRIFT"
+                review_status = "PENDING_REVIEW"
+                flags_list.append("FLAG_CLOCK_MANIPULATION_SUSPECTED")
         else:
+            # Tolerable drift: within 300s in past and within 60s in future
             timestamp_verification_status = "SERVER_AUTHORITATIVE"
             review_status = "NOT_REQUIRED"
+
+        if flags_list:
+            if payload.metadata is None:
+                payload.metadata = {}
+            payload.metadata["flags"] = list(dict.fromkeys(flags_list))
+
         device_reported_at = dev_time_utc
     else:
         device_reported_at = server_received_at
         clock_drift_seconds = Decimal("0.000")
         timestamp_verification_status = "SERVER_AUTHORITATIVE"
         review_status = "NOT_REQUIRED"
+
+    # Merge policy outcome review status: if policy flagged for review, ensure review_status is PENDING_REVIEW
+    if policy_outcome.review_status == "PENDING_REVIEW":
+        review_status = "PENDING_REVIEW"
+
+    # 5.5. Phase 7 Fraud Shield & Velocity Telemetry Evaluation
+    fraud_assessment = await evaluate_attendance_fraud_evidence(
+        session=session,
+        tenant_id=tenant_id,
+        employee_id=target_employee_id,
+        punch_payload=payload,
+        server_received_at=server_received_at,
+    )
+    # Device authorization check: a revoked device must not record new punches (Milestone 7.3)
+    if fraud_assessment.device_validation_status == "REVOKED":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Device registration has been revoked. Attendance punches are not authorized from this device.",
+        )
+
+    if fraud_assessment.review_status == "PENDING_REVIEW":
+        review_status = "PENDING_REVIEW"
 
     # 6. State Machine Validation & Atomic Multi-Event Break Closure
     latest_event_stmt = (
@@ -1016,12 +1181,14 @@ async def record_punch(
                 device_id=payload.device_id,
                 timestamp_verification_status=timestamp_verification_status,
                 review_status=review_status,
+                applied_policy_version=policy_outcome.policy_version,
                 idempotency_key=f"{payload.idempotency_key}:auto_break_end",
                 location_id=payload.location_id,
                 latitude=payload.latitude,
                 longitude=payload.longitude,
                 accuracy_meters=payload.accuracy_meters,
                 actor_user_id=user_id,
+                is_mock_location=payload.is_mock_location,
                 metadata_json={"system_action": "auto_closed_on_checkout"},
                 created_at=server_received_at,
             )
@@ -1029,6 +1196,29 @@ async def record_punch(
             additional_events.append(auto_break_end)
 
     # 7. Create Primary Attendance Event
+    event_metadata = dict(payload.metadata or {})
+    if policy_outcome.spatial_evidence:
+        event_metadata["spatial_evidence"] = policy_outcome.spatial_evidence
+    if policy_outcome.wifi_evidence:
+        event_metadata["wifi_evidence"] = policy_outcome.wifi_evidence
+    if policy_outcome.fallback_evidence:
+        event_metadata["fallback_evidence"] = policy_outcome.fallback_evidence
+    if policy_outcome.verification_flags:
+        event_metadata["verification_flags"] = policy_outcome.verification_flags
+    event_metadata["policy_version"] = policy_outcome.policy_version
+    event_metadata["verification_mode"] = policy_outcome.verification_mode
+
+    if fraud_assessment.signals:
+        event_metadata["fraud_signals"] = [
+            s.model_dump(mode="json") for s in fraud_assessment.signals
+        ]
+    if fraud_assessment.velocity_result:
+        event_metadata["velocity_analysis"] = fraud_assessment.velocity_result.model_dump(
+            mode="json"
+        )
+    if fraud_assessment.device_validation_status:
+        event_metadata["device_validation_status"] = fraud_assessment.device_validation_status
+
     main_event = AttendanceEvent(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
@@ -1041,21 +1231,46 @@ async def record_punch(
         device_reported_at=device_reported_at,
         effective_at=effective_at,
         clock_drift_seconds=clock_drift_seconds,
-        source="WEB",
+        source="WEB" if payload.device_id is None else "MOBILE",
         device_id=payload.device_id,
         timestamp_verification_status=timestamp_verification_status,
         review_status=review_status,
+        applied_policy_version=policy_outcome.policy_version,
+        wifi_bssid=payload.wifi_bssid,
+        wifi_ssid=payload.wifi_ssid,
+        is_mock_location=payload.is_mock_location,
         idempotency_key=payload.idempotency_key,
         location_id=payload.location_id,
         latitude=payload.latitude,
         longitude=payload.longitude,
         accuracy_meters=payload.accuracy_meters,
         actor_user_id=user_id,
-        metadata_json=payload.metadata or {},
+        metadata_json=event_metadata,
         created_at=server_received_at,
     )
     session.add(main_event)
     await session.flush()
+
+    # 7.5. Evaluate Tenant Fraud Rules, Scoring & Flags (Phase 7 Milestone 7.3)
+    try:
+        risk_score_res = await evaluate_and_persist_attendance_risk(
+            session=session,
+            tenant_id=tenant_id,
+            attendance_event_id=main_event.id,
+            employee_id=target_employee_id,
+            device_id_uuid=fraud_assessment.device_id_uuid,
+            signals=fraud_assessment.signals,
+            actor_user_id=user_id,
+        )
+        if risk_score_res.is_review_required or review_status == "PENDING_REVIEW":
+            main_event.review_status = "PENDING_REVIEW"
+        event_metadata["risk_score"] = risk_score_res.total_score
+        event_metadata["risk_category"] = risk_score_res.risk_category.value
+        event_metadata["fraud_flags"] = [f.signal_code for f in risk_score_res.applied_flags]
+        main_event.metadata_json = dict(event_metadata)
+        await session.flush()
+    except (StopIteration, StopAsyncIteration):
+        pass
 
     # 8. Recalculate Daily Attendance Summary Projection (Milestone 3)
     # Executed atomically inside the same transaction. Real database errors abort the punch.
@@ -1440,12 +1655,83 @@ async def recalculate_attendance_day(
     events = list((await session.execute(ev_stmt)).scalars().all())
 
     timeline = resolve_active_timeline(events)
+
+    # Phase 9: Check approved leave on target attendance date
+    is_on_leave = False
+    is_half_day_leave = False
+    half_day_period: str | None = None
+    leave_type_code: str | None = None
+    try:
+        from services.api.leave.holiday_service import resolve_applicable_calendar_for_employee
+        from services.api.leave.models import (
+            Holiday,
+            HolidayCalendar,
+            LeaveRequest,
+            OvertimeRecord,
+            OvertimeRule,
+        )
+        from services.api.leave.overtime_service import resolve_applicable_overtime_rule
+
+        leave_stmt = select(LeaveRequest).where(
+            LeaveRequest.tenant_id == tenant_id,
+            LeaveRequest.employee_id == employee_id,
+            LeaveRequest.status == "APPROVED",
+            LeaveRequest.start_date <= attendance_date,
+            LeaveRequest.end_date >= attendance_date,
+        )
+        approved_leave = (await session.execute(leave_stmt)).scalar_one_or_none()
+        if approved_leave and isinstance(approved_leave, LeaveRequest):
+            is_on_leave = True
+            is_half_day_leave = bool(approved_leave.is_half_day)
+            half_day_period = approved_leave.half_day_period
+            if getattr(approved_leave, "leave_type", None) and hasattr(
+                approved_leave.leave_type, "code"
+            ):
+                leave_type_code = approved_leave.leave_type.code
+    except Exception:
+        approved_leave = None
+
+    # Phase 9: Check holiday on target attendance date
+    is_holiday = False
+    try:
+        calendar, _ = await resolve_applicable_calendar_for_employee(
+            session=session,
+            tenant_id=tenant_id,
+            employee_id=employee_id,
+            year=attendance_date.year,
+        )
+        if calendar and isinstance(calendar, HolidayCalendar):
+            h_stmt = select(Holiday.id).where(
+                Holiday.tenant_id == tenant_id,
+                Holiday.calendar_id == calendar.id,
+                Holiday.holiday_date == attendance_date,
+                Holiday.holiday_type.in_(["PUBLIC", "COMPANY"]),
+            )
+            h_res = (await session.execute(h_stmt)).scalar_one_or_none()
+            is_holiday = h_res is not None and isinstance(h_res, uuid.UUID)
+    except Exception:
+        is_holiday = False
+
+    # Phase 9: Resolve applicable overtime rule
+    try:
+        ot_rule = await resolve_applicable_overtime_rule(session, tenant_id)
+        if not isinstance(ot_rule, OvertimeRule):
+            ot_rule = None
+    except Exception:
+        ot_rule = None
+
     calc = calculate_attendance_day(
         target_date=attendance_date,
         shift_version=version,
         resolved_timeline=timeline,
         tenant_timezone=tz_name,
         now_dt=as_of,
+        is_holiday=is_holiday,
+        is_on_leave=is_on_leave,
+        leave_type_code=leave_type_code,
+        is_half_day_leave=is_half_day_leave,
+        half_day_period=half_day_period,
+        overtime_rule=ot_rule,
     )
 
     day_stmt = (
@@ -1512,6 +1798,105 @@ async def recalculate_attendance_day(
         day_record.source_event_ids = calc.source_event_ids
         day_record.metadata_json = calc.metadata
         day_record.updated_at = now
+
+    # Phase 9: Upsert OvertimeRecord and preserve supervisor decisions
+    try:
+        from services.api.leave.models import OvertimeRecord
+
+        ot_stmt = (
+            select(OvertimeRecord)
+            .where(
+                OvertimeRecord.tenant_id == tenant_id,
+                OvertimeRecord.employee_id == employee_id,
+                OvertimeRecord.attendance_date == attendance_date,
+            )
+            .with_for_update()
+        )
+        existing_ot = (await session.execute(ot_stmt)).scalar_one_or_none()
+        if not isinstance(existing_ot, OvertimeRecord):
+            existing_ot = None
+
+        if calc.overtime_details and calc.overtime_details.raw_overtime_minutes > 0:
+            if existing_ot is None:
+                new_ot = OvertimeRecord(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant_id,
+                    employee_id=employee_id,
+                    attendance_day_id=day_record.id,
+                    attendance_date=attendance_date,
+                    overtime_rule_id=calc.overtime_details.rule_id,
+                    raw_overtime_minutes=calc.overtime_details.raw_overtime_minutes,
+                    approved_overtime_minutes=(
+                        calc.overtime_details.eligible_overtime_minutes
+                        if calc.overtime_details.status == "AUTO_APPROVED"
+                        else 0
+                    ),
+                    multiplier=calc.overtime_details.multiplier,
+                    payable_overtime_minutes=(
+                        calc.overtime_details.payable_overtime_minutes
+                        if calc.overtime_details.status == "AUTO_APPROVED"
+                        else 0
+                    ),
+                    overtime_type=calc.overtime_details.overtime_type,
+                    status=calc.overtime_details.status,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(new_ot)
+                if calc.overtime_details.status == "AUTO_APPROVED":
+                    day_record.overtime_minutes = calc.overtime_details.eligible_overtime_minutes
+                else:
+                    day_record.overtime_minutes = 0
+            else:
+                existing_ot.attendance_day_id = day_record.id
+                if existing_ot.status == "APPROVED":
+                    # Decision preservation: preserve approved status and adjust if raw reduced
+                    existing_ot.raw_overtime_minutes = calc.overtime_details.raw_overtime_minutes
+                    if existing_ot.approved_overtime_minutes > existing_ot.raw_overtime_minutes:
+                        existing_ot.approved_overtime_minutes = existing_ot.raw_overtime_minutes
+                        existing_ot.payable_overtime_minutes = int(
+                            round(
+                                Decimal(existing_ot.approved_overtime_minutes)
+                                * existing_ot.multiplier
+                            )
+                        )
+                    existing_ot.updated_at = now
+                    day_record.overtime_minutes = existing_ot.approved_overtime_minutes
+                elif existing_ot.status == "REJECTED":
+                    # Decision preservation: preserve rejection
+                    existing_ot.raw_overtime_minutes = calc.overtime_details.raw_overtime_minutes
+                    existing_ot.updated_at = now
+                    day_record.overtime_minutes = 0
+                else:
+                    # PENDING_APPROVAL or AUTO_APPROVED -> update from new calculation
+                    existing_ot.raw_overtime_minutes = calc.overtime_details.raw_overtime_minutes
+                    existing_ot.multiplier = calc.overtime_details.multiplier
+                    existing_ot.overtime_type = calc.overtime_details.overtime_type
+                    existing_ot.overtime_rule_id = calc.overtime_details.rule_id
+                    if calc.overtime_details.status == "AUTO_APPROVED":
+                        existing_ot.status = "AUTO_APPROVED"
+                        existing_ot.approved_overtime_minutes = (
+                            calc.overtime_details.eligible_overtime_minutes
+                        )
+                        existing_ot.payable_overtime_minutes = (
+                            calc.overtime_details.payable_overtime_minutes
+                        )
+                        day_record.overtime_minutes = existing_ot.approved_overtime_minutes
+                    else:
+                        existing_ot.status = "PENDING_APPROVAL"
+                        existing_ot.approved_overtime_minutes = 0
+                        existing_ot.payable_overtime_minutes = 0
+                        day_record.overtime_minutes = 0
+                    existing_ot.updated_at = now
+        elif existing_ot is not None:
+            if existing_ot.status in ("PENDING_APPROVAL", "AUTO_APPROVED"):
+                existing_ot.raw_overtime_minutes = 0
+                existing_ot.approved_overtime_minutes = 0
+                existing_ot.payable_overtime_minutes = 0
+                existing_ot.updated_at = now
+                day_record.overtime_minutes = 0
+    except Exception:
+        pass
 
     await session.flush()
     return day_record

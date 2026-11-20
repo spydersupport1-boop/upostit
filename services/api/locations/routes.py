@@ -22,6 +22,10 @@ from services.api.locations.schemas import (
     LocationListResponse,
     LocationResponse,
     LocationUpdateRequest,
+    WorkplaceWifiAccessPointCreateRequest,
+    WorkplaceWifiAccessPointListResponse,
+    WorkplaceWifiAccessPointResponse,
+    WorkplaceWifiAccessPointUpdateRequest,
 )
 from services.api.locations.service import (
     create_location,
@@ -31,6 +35,13 @@ from services.api.locations.service import (
     map_location_to_response,
     update_location,
     verify_geofence_coordinates,
+)
+from services.api.locations.wifi_service import (
+    create_workplace_wifi_access_point,
+    deactivate_workplace_wifi_access_point,
+    get_workplace_wifi_access_point,
+    list_workplace_wifi_access_points,
+    update_workplace_wifi_access_point,
 )
 
 router = APIRouter(prefix="/locations", tags=["Workplaces & Locations"])
@@ -201,4 +212,127 @@ async def list_location_employees_endpoint(
         page_size=page_size,
     )
     return LocationEmployeeListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+# ---------------------------------------------------------------------------
+# Workplace Wi-Fi Access Point Endpoints (Phase 6 Milestone 6.4.A)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{location_id}/wifi-access-points",
+    response_model=WorkplaceWifiAccessPointResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register an authorized Wi-Fi access point for a workplace",
+    dependencies=[Depends(require_permission(Permission.MANAGE_LOCATIONS))],
+)
+async def create_wifi_access_point_endpoint(
+    location_id: uuid.UUID,
+    data: WorkplaceWifiAccessPointCreateRequest,
+    context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> WorkplaceWifiAccessPointResponse:
+    """Registers an authorized Wi-Fi access point (BSSID) for attendance verification."""
+    ap = await create_workplace_wifi_access_point(
+        session=session,
+        tenant_id=context.tenant.id,
+        location_id=location_id,
+        user_id=context.user.id,
+        data=data,
+    )
+    return WorkplaceWifiAccessPointResponse.model_validate(ap)
+
+
+@router.get(
+    "/{location_id}/wifi-access-points",
+    response_model=WorkplaceWifiAccessPointListResponse,
+    summary="List authorized Wi-Fi access points for a workplace",
+    dependencies=[Depends(require_permission(Permission.VIEW_LOCATIONS))],
+)
+async def list_wifi_access_points_endpoint(
+    location_id: uuid.UUID,
+    context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+    is_active: Annotated[bool | None, Query(description="Filter by active status")] = None,
+) -> WorkplaceWifiAccessPointListResponse:
+    """Retrieves all authorized Wi-Fi access points configured for a workplace."""
+    items, total = await list_workplace_wifi_access_points(
+        session=session,
+        tenant_id=context.tenant.id,
+        location_id=location_id,
+        is_active=is_active,
+    )
+    return WorkplaceWifiAccessPointListResponse(
+        items=[WorkplaceWifiAccessPointResponse.model_validate(ap) for ap in items],
+        total=total,
+    )
+
+
+@router.get(
+    "/{location_id}/wifi-access-points/{ap_id}",
+    response_model=WorkplaceWifiAccessPointResponse,
+    summary="Get details of a workplace Wi-Fi access point",
+    dependencies=[Depends(require_permission(Permission.VIEW_LOCATIONS))],
+)
+async def get_wifi_access_point_endpoint(
+    location_id: uuid.UUID,
+    ap_id: uuid.UUID,
+    context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> WorkplaceWifiAccessPointResponse:
+    """Retrieves details of a specific authorized Wi-Fi access point."""
+    ap = await get_workplace_wifi_access_point(
+        session=session,
+        tenant_id=context.tenant.id,
+        location_id=location_id,
+        ap_id=ap_id,
+    )
+    return WorkplaceWifiAccessPointResponse.model_validate(ap)
+
+
+@router.patch(
+    "/{location_id}/wifi-access-points/{ap_id}",
+    response_model=WorkplaceWifiAccessPointResponse,
+    summary="Update a workplace Wi-Fi access point",
+    dependencies=[Depends(require_permission(Permission.MANAGE_LOCATIONS))],
+)
+async def update_wifi_access_point_endpoint(
+    location_id: uuid.UUID,
+    ap_id: uuid.UUID,
+    data: WorkplaceWifiAccessPointUpdateRequest,
+    context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> WorkplaceWifiAccessPointResponse:
+    """Updates friendly name, SSID, active status, or effective dates for an access point."""
+    ap = await update_workplace_wifi_access_point(
+        session=session,
+        tenant_id=context.tenant.id,
+        location_id=location_id,
+        ap_id=ap_id,
+        data=data,
+    )
+    return WorkplaceWifiAccessPointResponse.model_validate(ap)
+
+
+@router.delete(
+    "/{location_id}/wifi-access-points/{ap_id}",
+    response_model=WorkplaceWifiAccessPointResponse,
+    summary="Deactivate a workplace Wi-Fi access point",
+    dependencies=[Depends(require_permission(Permission.MANAGE_LOCATIONS))],
+)
+async def deactivate_wifi_access_point_endpoint(
+    location_id: uuid.UUID,
+    ap_id: uuid.UUID,
+    context: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> WorkplaceWifiAccessPointResponse:
+    """Soft-deactivates an access point so it can no longer be used for attendance verification."""
+    ap = await deactivate_workplace_wifi_access_point(
+        session=session,
+        tenant_id=context.tenant.id,
+        location_id=location_id,
+        ap_id=ap_id,
+    )
+    return WorkplaceWifiAccessPointResponse.model_validate(ap)
+
 

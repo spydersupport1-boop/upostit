@@ -843,7 +843,16 @@ export default function OrganizationPage() {
           <Link href="/">Attendance SaaS</Link>
           <span className="badge">Organization</span>
         </div>
-        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+          <Link href="/leave" className="btn btn-secondary btn-sm">
+            🌴 Leave
+          </Link>
+          <Link href="/organization/leave-types" className="btn btn-secondary btn-sm">
+            📋 Policies
+          </Link>
+          <Link href="/organization/holidays" className="btn btn-secondary btn-sm">
+            📅 Holidays
+          </Link>
           <Link href="/attendance" className="btn btn-secondary btn-sm">
             ⏱️ Attendance Console
           </Link>

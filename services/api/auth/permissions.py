@@ -41,6 +41,36 @@ class Permission(StrEnum):
     VIEW_ATTENDANCE = "view_attendance"
     MANAGE_ATTENDANCE = "manage_attendance"
     CORRECT_ATTENDANCE = "correct_attendance"
+    # Phase 6 Attendance Policy Permissions
+    MANAGE_ATTENDANCE_POLICY = "manage_attendance_policy"
+    VIEW_ATTENDANCE_POLICY = "view_attendance_policy"
+    # Phase 7 Device Binding & Fraud Shield Permissions
+    MANAGE_DEVICES = "manage_devices"
+    VIEW_DEVICES = "view_devices"
+    MANAGE_FRAUD_RULES = "manage_fraud_rules"
+    VIEW_FRAUD_RULES = "view_fraud_rules"
+    VIEW_FRAUD_FLAGS = "view_fraud_flags"
+    REVIEW_FRAUD_EVENTS = "review_fraud_events"
+    VIEW_FRAUD_REVIEWS = "view_fraud_reviews"
+    # Phase 8 Attendance Conflict Permissions
+    SUBMIT_ATTENDANCE_CONFLICT = "submit_attendance_conflict"
+    VIEW_ATTENDANCE_CONFLICTS = "view_attendance_conflicts"
+    RESOLVE_ATTENDANCE_CONFLICT = "resolve_attendance_conflict"
+    # Phase 9 Leave & Holiday Permissions
+    MANAGE_POLICIES = "manage_policies"
+    VIEW_POLICIES = "view_policies"
+    MANAGE_LEAVE_TYPES = "manage_leave_types"
+    VIEW_LEAVE_TYPES = "view_leave_types"
+    MANAGE_HOLIDAYS = "manage_holidays"
+    VIEW_HOLIDAYS = "view_holidays"
+    APPLY_LEAVE = "apply_leave"
+    VIEW_LEAVE_REQUESTS = "view_leave_requests"
+    APPROVE_LEAVE = "approve_leave"
+    # Phase 9 Overtime Permissions
+    MANAGE_OVERTIME_RULES = "manage_overtime_rules"
+    VIEW_OVERTIME_RULES = "view_overtime_rules"
+    APPROVE_OVERTIME = "approve_overtime"
+    VIEW_OVERTIME_RECORDS = "view_overtime_records"
 
 
 # Role-to-Permissions Mapping (Deny by default)
@@ -67,6 +97,31 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_ATTENDANCE,
         Permission.MANAGE_ATTENDANCE,
         Permission.CORRECT_ATTENDANCE,
+        Permission.MANAGE_ATTENDANCE_POLICY,
+        Permission.VIEW_ATTENDANCE_POLICY,
+        Permission.MANAGE_DEVICES,
+        Permission.VIEW_DEVICES,
+        Permission.MANAGE_FRAUD_RULES,
+        Permission.VIEW_FRAUD_RULES,
+        Permission.VIEW_FRAUD_FLAGS,
+        Permission.REVIEW_FRAUD_EVENTS,
+        Permission.VIEW_FRAUD_REVIEWS,
+        Permission.SUBMIT_ATTENDANCE_CONFLICT,
+        Permission.VIEW_ATTENDANCE_CONFLICTS,
+        Permission.RESOLVE_ATTENDANCE_CONFLICT,
+        Permission.MANAGE_POLICIES,
+        Permission.VIEW_POLICIES,
+        Permission.MANAGE_LEAVE_TYPES,
+        Permission.VIEW_LEAVE_TYPES,
+        Permission.MANAGE_HOLIDAYS,
+        Permission.VIEW_HOLIDAYS,
+        Permission.APPLY_LEAVE,
+        Permission.VIEW_LEAVE_REQUESTS,
+        Permission.APPROVE_LEAVE,
+        Permission.MANAGE_OVERTIME_RULES,
+        Permission.VIEW_OVERTIME_RULES,
+        Permission.APPROVE_OVERTIME,
+        Permission.VIEW_OVERTIME_RECORDS,
     },
     UserRole.ADMIN: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -90,6 +145,31 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_ATTENDANCE,
         Permission.MANAGE_ATTENDANCE,
         Permission.CORRECT_ATTENDANCE,
+        Permission.MANAGE_ATTENDANCE_POLICY,
+        Permission.VIEW_ATTENDANCE_POLICY,
+        Permission.MANAGE_DEVICES,
+        Permission.VIEW_DEVICES,
+        Permission.MANAGE_FRAUD_RULES,
+        Permission.VIEW_FRAUD_RULES,
+        Permission.VIEW_FRAUD_FLAGS,
+        Permission.REVIEW_FRAUD_EVENTS,
+        Permission.VIEW_FRAUD_REVIEWS,
+        Permission.SUBMIT_ATTENDANCE_CONFLICT,
+        Permission.VIEW_ATTENDANCE_CONFLICTS,
+        Permission.RESOLVE_ATTENDANCE_CONFLICT,
+        Permission.MANAGE_POLICIES,
+        Permission.VIEW_POLICIES,
+        Permission.MANAGE_LEAVE_TYPES,
+        Permission.VIEW_LEAVE_TYPES,
+        Permission.MANAGE_HOLIDAYS,
+        Permission.VIEW_HOLIDAYS,
+        Permission.APPLY_LEAVE,
+        Permission.VIEW_LEAVE_REQUESTS,
+        Permission.APPROVE_LEAVE,
+        Permission.MANAGE_OVERTIME_RULES,
+        Permission.VIEW_OVERTIME_RULES,
+        Permission.APPROVE_OVERTIME,
+        Permission.VIEW_OVERTIME_RECORDS,
     },
     UserRole.HR: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -109,6 +189,30 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_ATTENDANCE,
         Permission.MANAGE_ATTENDANCE,
         Permission.CORRECT_ATTENDANCE,
+        Permission.VIEW_ATTENDANCE_POLICY,
+        Permission.MANAGE_DEVICES,
+        Permission.VIEW_DEVICES,
+        Permission.MANAGE_FRAUD_RULES,
+        Permission.VIEW_FRAUD_RULES,
+        Permission.VIEW_FRAUD_FLAGS,
+        Permission.REVIEW_FRAUD_EVENTS,
+        Permission.VIEW_FRAUD_REVIEWS,
+        Permission.SUBMIT_ATTENDANCE_CONFLICT,
+        Permission.VIEW_ATTENDANCE_CONFLICTS,
+        Permission.RESOLVE_ATTENDANCE_CONFLICT,
+        Permission.MANAGE_POLICIES,
+        Permission.VIEW_POLICIES,
+        Permission.MANAGE_LEAVE_TYPES,
+        Permission.VIEW_LEAVE_TYPES,
+        Permission.MANAGE_HOLIDAYS,
+        Permission.VIEW_HOLIDAYS,
+        Permission.APPLY_LEAVE,
+        Permission.VIEW_LEAVE_REQUESTS,
+        Permission.APPROVE_LEAVE,
+        Permission.MANAGE_OVERTIME_RULES,
+        Permission.VIEW_OVERTIME_RULES,
+        Permission.APPROVE_OVERTIME,
+        Permission.VIEW_OVERTIME_RECORDS,
     },
     UserRole.MANAGER: {
         Permission.VIEW_COMPANY_PROFILE,
@@ -120,6 +224,21 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.RECORD_PUNCH,
         Permission.VIEW_ATTENDANCE,
         Permission.CORRECT_ATTENDANCE,
+        Permission.VIEW_ATTENDANCE_POLICY,
+        Permission.VIEW_FRAUD_FLAGS,
+        Permission.VIEW_FRAUD_REVIEWS,
+        Permission.SUBMIT_ATTENDANCE_CONFLICT,
+        Permission.VIEW_ATTENDANCE_CONFLICTS,
+        Permission.RESOLVE_ATTENDANCE_CONFLICT,
+        Permission.VIEW_POLICIES,
+        Permission.VIEW_LEAVE_TYPES,
+        Permission.VIEW_HOLIDAYS,
+        Permission.APPLY_LEAVE,
+        Permission.VIEW_LEAVE_REQUESTS,
+        Permission.APPROVE_LEAVE,
+        Permission.VIEW_OVERTIME_RULES,
+        Permission.APPROVE_OVERTIME,
+        Permission.VIEW_OVERTIME_RECORDS,
     },
     UserRole.EMPLOYEE: {
         Permission.VIEW_OWN_PROFILE,
@@ -127,6 +246,16 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.VIEW_SHIFTS,
         Permission.RECORD_PUNCH,
         Permission.VIEW_ATTENDANCE,
+        Permission.VIEW_ATTENDANCE_POLICY,
+        Permission.SUBMIT_ATTENDANCE_CONFLICT,
+        Permission.VIEW_ATTENDANCE_CONFLICTS,
+        Permission.VIEW_POLICIES,
+        Permission.VIEW_LEAVE_TYPES,
+        Permission.VIEW_HOLIDAYS,
+        Permission.APPLY_LEAVE,
+        Permission.VIEW_LEAVE_REQUESTS,
+        Permission.VIEW_OVERTIME_RULES,
+        Permission.VIEW_OVERTIME_RECORDS,
     },
 }
 

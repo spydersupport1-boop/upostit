@@ -14,8 +14,11 @@ from services.api.attendance.routes import (
 from services.api.auth.routes import router as auth_router
 from services.api.config import settings
 from services.api.database import check_database_connection, check_postgis_capability
+from services.api.devices.routes import router as devices_router
 from services.api.employees.invitation_routes import router as invitations_router
 from services.api.employees.routes import router as employees_router
+from services.api.fraud.routes import router as fraud_router
+from services.api.leave.routes import holidays_router, leave_router, overtime_router
 from services.api.locations.routes import router as locations_router
 from services.api.organization.routes import (
     departments_router,
@@ -54,6 +57,11 @@ api_v1_router.include_router(invitations_router)
 api_v1_router.include_router(locations_router)
 api_v1_router.include_router(shifts_router)
 api_v1_router.include_router(attendance_router)
+api_v1_router.include_router(devices_router)
+api_v1_router.include_router(fraud_router)
+api_v1_router.include_router(leave_router)
+api_v1_router.include_router(holidays_router)
+api_v1_router.include_router(overtime_router)
 
 app.include_router(api_v1_router)
 

@@ -58,6 +58,9 @@ def map_assignment_to_response(
         effective_from=assignment.effective_from,
         effective_to=assignment.effective_to,
         is_current=is_current,
+        latitude=location.latitude,
+        longitude=location.longitude,
+        radius_meters=location.radius_meters,
         created_at=assignment.created_at,
     )
 
