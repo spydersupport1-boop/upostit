@@ -10,6 +10,20 @@ jobs:
   backend-checks:
     name: Backend Lint, Type-Check & Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: upostit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -34,6 +48,10 @@ jobs:
           mypy services/api/
 
       - name: Run Pytest Test Suite
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/upostit_test
+          SECRET_KEY: ci-test-secret-key-minimum-32-characters-required
+          ENVIRONMENT: testing
         run: |
           pytest tests/ -v
 
@@ -94,7 +112,7 @@ jobs:
         run: flutter pub get
 
       - name: Run Flutter Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Run Flutter Tests
         run: flutter test

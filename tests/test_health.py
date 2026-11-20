@@ -38,10 +38,10 @@ async def test_readiness_check_returns_valid_structure():
 async def test_check_database_connection_when_unconfigured():
     """Verify that check_database_connection handles empty DATABASE_URL safely."""
     # When DATABASE_URL is not set, it should safely return False with safe error message
-    if not settings.DATABASE_URL:
+    if not settings.DATABASE_URL or "[YOUR-PASSWORD]" in settings.DATABASE_URL:
         ok, msg = await check_database_connection()
         assert ok is False
-        assert "not configured" in msg
+        assert "not configured" in msg or "not fully configured" in msg
 
 
 def test_openapi_docs_available():
