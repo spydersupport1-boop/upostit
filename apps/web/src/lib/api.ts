@@ -1258,6 +1258,7 @@ export interface SupervisorConflictQueueItemDto {
   session_id?: string | null;
   status: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | string;
   total_events_count: number;
+  dependent_count?: number | null;
   primary_event_type: string;
   primary_device_reported_at: string;
   rejection_summary?: string | null;
@@ -1267,7 +1268,7 @@ export interface SupervisorConflictQueueItemDto {
   decision_reason?: string | null;
   reviewer_user_id?: string | null;
   decided_at?: string | null;
-  resolved_correction_event_ids: string[];
+  resolved_correction_event_ids?: string[];
 }
 
 export interface SupervisorConflictQueueListResponseDto {
@@ -1279,10 +1280,14 @@ export interface SupervisorConflictQueueListResponseDto {
 }
 
 export interface ConflictTelemetryEventDto {
-  local_id: string;
-  idempotency_key: string;
+  local_id?: string | null;
+  idempotency_key?: string | null;
   event_type: string;
-  device_reported_at: string;
+  device_reported_at?: string | null;
+  event_id?: string | null;
+  client_timestamp?: string | null;
+  rejection_code?: number | null;
+  rejection_reason?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   accuracy_meters?: number | null;
@@ -1302,6 +1307,7 @@ export interface AttendanceConflictIncidentDetailDto {
   id: string;
   tenant_id: string;
   bundle_id: string;
+  bundle_fingerprint?: string | null;
   session_id?: string | null;
   status: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | string;
   employee: ConflictIncidentEmployeeDetailDto;
@@ -1316,8 +1322,8 @@ export interface AttendanceConflictIncidentDetailDto {
   decision_reason?: string | null;
   reviewer_user_id?: string | null;
   decided_at?: string | null;
-  resolved_correction_event_ids: string[];
-  metadata_json: Record<string, unknown>;
+  resolved_correction_event_ids?: string[];
+  metadata_json?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -1333,6 +1339,7 @@ export interface AttendanceConflictDecisionResponseDto {
   tenant_id: string;
   employee_id: string;
   bundle_id: string;
+  session_id?: string | null;
   status: string;
   decision: string;
   decision_reason: string;
@@ -1599,8 +1606,11 @@ export interface LeaveRequestDto {
   half_day_period?: "FIRST_HALF" | "SECOND_HALF" | string | null;
   total_days: number | string;
   reason: string;
+  document_url?: string | null;
+  rejection_reason?: string | null;
   status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "CANCELLED" | string;
   reviewer_user_id?: string | null;
+  decided_by_user_id?: string | null;
   reviewer_notes?: string | null;
   decided_at?: string | null;
   created_at: string;

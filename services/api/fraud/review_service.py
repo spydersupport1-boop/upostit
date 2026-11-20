@@ -93,7 +93,7 @@ async def get_fraud_event_review_detail(
             Department.id == employee.department_id,
         )
         dept_res = (await session.execute(dept_stmt)).scalar_one_or_none()
-        dept_name = dept_res.name if hasattr(dept_res, "name") else (str(dept_res) if dept_res else None)
+        dept_name = str(dept_res) if dept_res is not None else None
 
     # 5. Resolve Location telemetry & metadata
     location_payload: dict[str, object] | None = None
@@ -105,7 +105,7 @@ async def get_fraud_event_review_detail(
             Location.id == event.location_id,
         )
         loc_res = (await session.execute(loc_stmt)).scalar_one_or_none()
-        loc_name = loc_res.name if hasattr(loc_res, "name") else (str(loc_res) if loc_res else None)
+        loc_name = str(loc_res) if loc_res is not None else None
 
     if event.location_id is not None or event.latitude is not None or event.longitude is not None:
         location_payload = {
