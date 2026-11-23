@@ -15,8 +15,7 @@ import 'package:mobile/features/leave/domain/entities/leave_request.dart';
 
 class MockApiClient extends Mock implements ApiClient {}
 
-class MockLeaveRemoteDataSource extends Mock
-    implements LeaveRemoteDataSource {}
+class MockLeaveRemoteDataSource extends Mock implements LeaveRemoteDataSource {}
 
 void main() {
   group('Leave Models & Invariants', () {
@@ -74,7 +73,8 @@ void main() {
       expect(model.availableBalance, 15.5);
     });
 
-    test('LeaveRequestModel deserializes from JSON and resolves properties', () {
+    test('LeaveRequestModel deserializes from JSON and resolves properties',
+        () {
       final json = {
         'id': 'lr-1',
         'employee_id': 'emp-101',
@@ -277,10 +277,12 @@ void main() {
       repository = LeaveRepositoryImpl(mockRemoteDataSource);
     });
 
-    test('LeaveRemoteDataSourceImpl.getMyBalances parses API response', () async {
+    test('LeaveRemoteDataSourceImpl.getMyBalances parses API response',
+        () async {
       when(() => mockApiClient.get<Map<String, dynamic>>(any()))
           .thenAnswer((_) async => Response(
-                requestOptions: RequestOptions(path: ApiEndpoints.leaveBalancesMy),
+                requestOptions:
+                    RequestOptions(path: ApiEndpoints.leaveBalancesMy),
                 data: {
                   'success': true,
                   'data': [
@@ -341,7 +343,8 @@ void main() {
       expect(result.value.status, 'PENDING_APPROVAL');
     });
 
-    test('LeaveRepositoryImpl.cancelLeaveRequest maps ServerException to ServerFailure',
+    test(
+        'LeaveRepositoryImpl.cancelLeaveRequest maps ServerException to ServerFailure',
         () async {
       when(() => mockRemoteDataSource.cancelLeaveRequest(
             'req-99',

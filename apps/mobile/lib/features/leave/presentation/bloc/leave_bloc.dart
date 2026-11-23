@@ -43,11 +43,14 @@ class LeaveBloc extends Bloc<LeaveEvent, LeaveState> {
 
     emit(state.copyWith(
       isLoading: false,
-      balances: balancesResult.isSuccess ? balancesResult.value : state.balances,
-      leaveTypes:
-          leaveTypesResult.isSuccess ? leaveTypesResult.value : state.leaveTypes,
-      myRequests:
-          myRequestsResult.isSuccess ? myRequestsResult.value : state.myRequests,
+      balances:
+          balancesResult.isSuccess ? balancesResult.value : state.balances,
+      leaveTypes: leaveTypesResult.isSuccess
+          ? leaveTypesResult.value
+          : state.leaveTypes,
+      myRequests: myRequestsResult.isSuccess
+          ? myRequestsResult.value
+          : state.myRequests,
       upcomingHolidays: holidaysResult.isSuccess
           ? holidaysResult.value
           : state.upcomingHolidays,
@@ -247,4 +250,3 @@ class LeaveBloc extends Bloc<LeaveEvent, LeaveState> {
     emit(state.copyWith(clearNotices: true));
   }
 }
-

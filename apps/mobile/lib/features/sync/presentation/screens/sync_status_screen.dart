@@ -437,6 +437,28 @@ class _SyncStatusScreenState extends State<SyncStatusScreen> {
                     .copyWith(color: AppColors.textMuted),
               ),
             ),
+          ] else if (state.isSyncing && state.currentOperation != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Center(
+              child: Text(
+                state.currentOperation!,
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ] else if (state.retryStatus != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Center(
+              child: Text(
+                state.retryStatus!,
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.warning,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
         ],
       ),

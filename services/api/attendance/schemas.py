@@ -1295,3 +1295,201 @@ class AttendanceConflictDecisionResponse(BaseModel):
     resolved_correction_event_ids: list[str] = Field(default_factory=list)
     affected_attendance_dates: list[date] = Field(default_factory=list)
     recalculated_days_count: int = 0
+
+
+# ==============================================================================
+# Phase 11 Milestone 11.2: Backend Batch Synchronization Schemas
+# ==============================================================================
+
+
+class BatchSyncItemStatus(StrEnum):
+    """Execution status for an individual offline attendance punch within a sync batch."""
+
+    ACCEPTED = "ACCEPTED"
+    DUPLICATE = "DUPLICATE"
+    REQUIRES_REVIEW = "REQUIRES_REVIEW"
+    REJECTED = "REJECTED"
+    CONFLICT = "CONFLICT"
+    RETRYABLE = "RETRYABLE"
+
+
+class BatchSyncPunchItem(BaseModel):
+    """An individual attendance punch event queued offline on a mobile client."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    local_id: str = Field(
+        min_length=1,
+        max_length=64,
+        description="Client local SQLite queue item UUID or identifier",
+    )
+    idempotency_key: str = Field(
+        min_length=1,
+        max_length=128,
+        description="Unique client-generated UUID v4 idempotency key",
+    )
+    event_type: str = Field(
+        description="Punch action type (CHECK_IN, CHECK_OUT, BREAK_START, BREAK_END)"
+    )
+    device_reported_at: datetime = Field(
+        description="Client hardware capture timestamp in UTC"
+    )
+    sequence_number: int | None = Field(
+        default=None,
+        ge=1,
+        description="Client-side strictly monotonic sequence number",
+    )
+    session_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Client shift/session correlation identifier",
+    )
+    location_id: uuid.UUID | None = Field(
+        default=None,
+        description="Workplace location UUID if geofenced",
+    )
+    latitude: Decimal | None = Field(
+        default=None,
+        ge=-90,
+        le=90,
+        description="WGS84 latitude",
+    )
+    longitude: Decimal | None = Field(
+        default=None,
+        ge=-180,
+        le=180,
+        description="WGS84 longitude",
+    )
+    accuracy_meters: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=50000,
+        description="Horizontal GPS accuracy in meters",
+    )
+    wifi_bssid: str | None = Field(
+        default=None,
+        max_length=32,
+        description="Connected access point BSSID",
+    )
+    wifi_ssid: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Connected access point SSID",
+    )
+    wifi_signal_status: Literal[
+        "AVAILABLE", "UNAVAILABLE", "UNSUPPORTED", "PERMISSION_DENIED"
+    ] = Field(
+        default="AVAILABLE",
+        description="Device Wi-Fi telemetry capability status",
+    )
+    device_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Hardware installation identifier",
+    )
+    is_mock_location: bool | None = Field(
+        default=False,
+        description="Whether mock GPS was detected on client",
+    )
+    location_captured_at: datetime | None = Field(
+        default=None,
+        description="Hardware timestamp when GPS was acquired",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional device or sensor telemetry",
+    )
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event_type(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if clean not in ("CHECK_IN", "CHECK_OUT", "BREAK_START", "BREAK_END"):
+            raise ValueError(f"Invalid attendance event type: {v}")
+        return clean
+
+    @field_validator("device_reported_at", "location_captured_at")
+    @classmethod
+    def ensure_utc(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
+
+
+class AttendanceBatchSyncRequest(BaseModel):
+    """Batch payload containing up to 50 queued offline attendance punches from a client device."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    batch_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Client batch correlation identifier",
+    )
+    device_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Device hardware identifier",
+    )
+    employee_id: uuid.UUID | None = Field(
+        default=None,
+        description="Target employee UUID (must match authenticated user unless Owner/Admin/HR)",
+    )
+    items: list[BatchSyncPunchItem] = Field(
+        min_length=1,
+        max_length=50,
+        description="List of offline attendance punches (minimum 1, maximum 50)",
+    )
+
+
+class BatchSyncReceiptItem(BaseModel):
+    """Individual processing receipt for a single item submitted in an attendance sync batch."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    local_id: str = Field(description="Client local SQLite queue ID")
+    idempotency_key: str = Field(description="Unique client punch UUID")
+    status: BatchSyncItemStatus = Field(description="Processing result status")
+    event_type: str = Field(description="Attendance event type")
+    server_event_id: uuid.UUID | None = Field(
+        default=None,
+        description="Created or existing attendance event UUID in ledger",
+    )
+    effective_at: datetime | None = Field(
+        default=None,
+        description="Authoritative effective timestamp applied for shift calculation",
+    )
+    review_status: str | None = Field(
+        default=None,
+        description="Review status (NOT_REQUIRED, PENDING_REVIEW, FLAGGED, etc.)",
+    )
+    error_code: str | None = Field(
+        default=None,
+        description="Standardized error code if rejected or conflict",
+    )
+    error_message: str | None = Field(
+        default=None,
+        description="Detailed explanation of rejection or conflict",
+    )
+    idempotent_replay: bool = Field(
+        default=False,
+        description="Whether this receipt represents a replay of a previously completed punch",
+    )
+
+
+class AttendanceBatchSyncResponse(BaseModel):
+    """Aggregate response for a batch synchronization request."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    batch_id: str | None = None
+    total_items: int
+    accepted_count: int
+    duplicate_count: int
+    requires_review_count: int
+    conflict_count: int
+    rejected_count: int
+    receipts: list[BatchSyncReceiptItem]
+

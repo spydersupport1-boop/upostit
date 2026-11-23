@@ -40,4 +40,3 @@ class LeaveType extends Equatable {
         isActive,
       ];
 }
-

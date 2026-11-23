@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -50,6 +51,8 @@ from services.api.fraud.engine import evaluate_and_persist_attendance_risk
 from services.api.fraud.service import evaluate_attendance_fraud_evidence
 from services.api.locations.models import Location
 from services.api.tenants.models import Tenant
+
+logger = logging.getLogger(__name__)
 
 
 async def create_shift_template(
@@ -1050,26 +1053,31 @@ async def record_punch(
             timestamp_verification_status = "SUSPICIOUS_CLOCK_DRIFT"
             review_status = "PENDING_REVIEW"
             flags_list.append("FLAG_FUTURE_TIMESTAMP_DETECTED")
+            effective_at = server_received_at
         elif past_seconds > (standard_window_hours * 3600 + 5.0):
             # Past timestamp between standard window (24h) and configured maximum (up to 72h) -> Supervisor review required
             timestamp_verification_status = "UNVERIFIED_OFFLINE"
             review_status = "PENDING_REVIEW"
             flags_list.append("FLAG_OFFLINE_WINDOW_EXCEEDED")
+            effective_at = dev_time_utc
         elif past_seconds > 300:
             if is_offline_sync:
                 # Legitimate delayed offline sync within standard window (<= 24h)
                 timestamp_verification_status = "UNVERIFIED_OFFLINE"
                 review_status = "NOT_REQUIRED"
                 flags_list.append("FLAG_DELAYED_OFFLINE_SYNC")
+                effective_at = dev_time_utc
             else:
                 # Online punch with unexplained past clock drift > 300s
                 timestamp_verification_status = "SUSPICIOUS_CLOCK_DRIFT"
                 review_status = "PENDING_REVIEW"
                 flags_list.append("FLAG_CLOCK_MANIPULATION_SUSPECTED")
+                effective_at = server_received_at
         else:
             # Tolerable drift: within 300s in past and within 60s in future
             timestamp_verification_status = "SERVER_AUTHORITATIVE"
             review_status = "NOT_REQUIRED"
+            effective_at = dev_time_utc if is_offline_sync else server_received_at
 
         if flags_list:
             if payload.metadata is None:
@@ -1269,6 +1277,69 @@ async def record_punch(
         event_metadata["fraud_flags"] = [f.signal_code for f in risk_score_res.applied_flags]
         main_event.metadata_json = dict(event_metadata)
         await session.flush()
+
+        # Emit Phase 10 Fraud Shield Alerts (non-blocking)
+        try:
+            from services.api.notifications import (
+                HighRiskFraudAlertEvent,
+                ImpossibleTravelSignalEvent,
+                MockGpsDetectedEvent,
+                dispatch_domain_event,
+            )
+
+            emp_name = f"{emp.first_name} {emp.last_name}".strip()
+            applied_flag_codes = [f.signal_code for f in risk_score_res.applied_flags]
+
+            # 1. High/Critical Risk Score Alert
+            if risk_score_res.risk_category.value in ("HIGH", "CRITICAL"):
+                await dispatch_domain_event(
+                    session=session,
+                    event=HighRiskFraudAlertEvent(
+                        tenant_id=tenant_id,
+                        attendance_event_id=main_event.id,
+                        employee_id=target_employee_id,
+                        employee_name=emp_name,
+                        risk_score=risk_score_res.total_score,
+                        risk_category=risk_score_res.risk_category.value,
+                        attendance_event_type=main_event.event_type,
+                        flag_summary=", ".join(applied_flag_codes) or "High risk score",
+                        actor_user_id=user_id,
+                    ),
+                )
+
+            # 2. Impossible Travel Velocity Signal
+            if "IMPOSSIBLE_TRAVEL_VELOCITY" in applied_flag_codes and fraud_assessment.velocity_result:
+                vel_res = fraud_assessment.velocity_result
+                await dispatch_domain_event(
+                    session=session,
+                    event=ImpossibleTravelSignalEvent(
+                        tenant_id=tenant_id,
+                        attendance_event_id=main_event.id,
+                        employee_id=target_employee_id,
+                        employee_name=emp_name,
+                        velocity_mps=float(vel_res.velocity_mps),
+                        distance_km=float(vel_res.distance_meters) / 1000.0,
+                        elapsed_seconds=float(vel_res.elapsed_seconds),
+                        actor_user_id=user_id,
+                    ),
+                )
+
+            # 3. Mock GPS Detected Signal
+            if "MOCK_LOCATION_DETECTED" in applied_flag_codes or payload.is_mock_location:
+                await dispatch_domain_event(
+                    session=session,
+                    event=MockGpsDetectedEvent(
+                        tenant_id=tenant_id,
+                        attendance_event_id=main_event.id,
+                        employee_id=target_employee_id,
+                        employee_name=emp_name,
+                        device_id=payload.device_id,
+                        location_summary=f"Mock GPS detected at lat={payload.latitude}, lon={payload.longitude}",
+                        actor_user_id=user_id,
+                    ),
+                )
+        except Exception as exc:
+            logger.warning("Failed to dispatch fraud alert notification: %s", exc)
     except (StopIteration, StopAsyncIteration):
         pass
 

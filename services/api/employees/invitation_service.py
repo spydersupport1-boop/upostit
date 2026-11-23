@@ -168,6 +168,30 @@ async def create_employee_invitation(
     invitation.delivery_status = delivery_result.status
     invitation.delivery_error = delivery_result.error_message
 
+    # Emit Phase 10 EmployeeInvitationCreatedEvent (non-blocking)
+    try:
+        from services.api.notifications import (
+            EmployeeInvitationCreatedEvent,
+            dispatch_domain_event,
+        )
+
+        await dispatch_domain_event(
+            session=session,
+            event=EmployeeInvitationCreatedEvent(
+                tenant_id=tenant_id,
+                invitation_id=invitation.id,
+                employee_id=employee.id,
+                recipient_email=employee.work_email,
+                recipient_name=recipient_name,
+                company_name=company_name,
+                activation_url=activation_url,
+                expires_hours=settings.INVITATION_TOKEN_EXPIRE_HOURS,
+                actor_user_id=current_user_id,
+            ),
+        )
+    except Exception as exc:
+        logger.warning("Failed to dispatch invitation sent notification: %s", exc)
+
     await session.commit()
     await session.refresh(invitation)
 
@@ -310,6 +334,30 @@ async def resend_invitation(
     )
     invitation.delivery_status = delivery_result.status
     invitation.delivery_error = delivery_result.error_message
+
+    # Emit Phase 10 EmployeeInvitationSentEvent (non-blocking)
+    try:
+        from services.api.notifications import (
+            EmployeeInvitationSentEvent,
+            dispatch_domain_event,
+        )
+
+        await dispatch_domain_event(
+            session=session,
+            event=EmployeeInvitationSentEvent(
+                tenant_id=tenant_id,
+                invitation_id=invitation.id,
+                employee_id=employee.id,
+                recipient_email=employee.work_email,
+                recipient_name=recipient_name,
+                company_name=company_name,
+                activation_url=activation_url,
+                expires_hours=settings.INVITATION_TOKEN_EXPIRE_HOURS,
+                actor_user_id=current_user_id,
+            ),
+        )
+    except Exception as exc:
+        logger.warning("Failed to dispatch invitation sent notification: %s", exc)
 
     await session.commit()
     await session.refresh(invitation)

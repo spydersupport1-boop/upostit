@@ -632,8 +632,9 @@ class TestPunchAPIEndpointFraudTelemetry:
         user_id = uuid.uuid4()
         emp = _create_mock_employee(tenant_id, emp_id, user_id)
 
-        # Prior punch at Bangalore 10 minutes ago
-        t_prev = datetime(2026, 11, 19, 8, 0, 0, tzinfo=UTC)
+        # Prior punch at Bangalore 20 minutes ago
+        t_curr = datetime.now(UTC) - timedelta(minutes=10)
+        t_prev = t_curr - timedelta(minutes=10)
         prev_event = _create_mock_event(tenant_id, emp_id, lat=12.9716, lon=77.5946, effective_at=t_prev)
 
         session = AsyncMock()
@@ -684,7 +685,6 @@ class TestPunchAPIEndpointFraudTelemetry:
         ]
 
         # Current punch 10 minutes later in Mumbai (980 km away -> velocity ~1633 m/s)
-        t_curr = datetime(2026, 11, 19, 8, 10, 0, tzinfo=UTC)
         payload = PunchRequest(
             event_type="CHECK_OUT",
             idempotency_key="punch-velocity-teleport-test-01",

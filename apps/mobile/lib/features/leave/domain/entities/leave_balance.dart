@@ -46,4 +46,3 @@ class LeaveBalance extends Equatable {
         availableBalance,
       ];
 }
-

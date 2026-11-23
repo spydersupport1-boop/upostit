@@ -25,6 +25,9 @@ dependencies:
   sqflite_sqlcipher: ^3.4.1
   device_info_plus: ^12.4.0
   package_info_plus: ^9.0.1
+  firebase_core: ^5.2.0
+  firebase_messaging: ^17.1.0
+  workmanager: ^0.10.10
 
 dev_dependencies:
   flutter_test:

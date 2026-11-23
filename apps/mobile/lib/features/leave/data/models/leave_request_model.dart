@@ -47,4 +47,3 @@ class LeaveRequestModel extends LeaveRequest {
     );
   }
 }
-

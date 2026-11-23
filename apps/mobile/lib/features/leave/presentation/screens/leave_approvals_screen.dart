@@ -174,8 +174,7 @@ class _LeaveApprovalsScreenState extends State<LeaveApprovalsScreen> {
       if (profileBloc != null &&
           profileBloc.state is ProfileLoaded &&
           (profileBloc.state as ProfileLoaded).employee != null) {
-        currentEmployeeId =
-            (profileBloc.state as ProfileLoaded).employee!.id;
+        currentEmployeeId = (profileBloc.state as ProfileLoaded).employee!.id;
       }
     } catch (_) {
       // ProfileBloc not available in scope or test mock
@@ -284,7 +283,8 @@ class _LeaveApprovalsScreenState extends State<LeaveApprovalsScreen> {
                                 itemBuilder: (context, index) {
                                   final req = state.supervisorQueue[index];
                                   final isSelf = (currentEmployeeId != null &&
-                                          req.employeeId == currentEmployeeId) ||
+                                          req.employeeId ==
+                                              currentEmployeeId) ||
                                       (currentUserId != null &&
                                           req.employeeId == currentUserId);
                                   final isPending = req.isPending;
@@ -338,7 +338,8 @@ class _LeaveApprovalsScreenState extends State<LeaveApprovalsScreen> {
                                                         .smBorderRadius,
                                                   ),
                                                   child: Text(
-                                                    req.leaveTypeCode ?? 'LEAVE',
+                                                    req.leaveTypeCode ??
+                                                        'LEAVE',
                                                     style: const TextStyle(
                                                       fontSize: 11,
                                                       fontWeight:
@@ -394,8 +395,8 @@ class _LeaveApprovalsScreenState extends State<LeaveApprovalsScreen> {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: AppColors.infoLight,
-                                                  borderRadius: AppRadius
-                                                      .smBorderRadius,
+                                                  borderRadius:
+                                                      AppRadius.smBorderRadius,
                                                 ),
                                                 child: Text(
                                                   req.halfDayPeriod ==
@@ -444,8 +445,8 @@ class _LeaveApprovalsScreenState extends State<LeaveApprovalsScreen> {
                                             ),
                                             decoration: BoxDecoration(
                                               color: AppColors.warningLight,
-                                              borderRadius: AppRadius
-                                                  .smBorderRadius,
+                                              borderRadius:
+                                                  AppRadius.smBorderRadius,
                                             ),
                                             child: const Row(
                                               children: [

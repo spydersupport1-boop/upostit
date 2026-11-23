@@ -58,7 +58,8 @@ class LeaveState extends Equatable {
       supervisorQueue: supervisorQueue ?? this.supervisorQueue,
       statusFilter:
           clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
-      successNotice: clearNotices ? null : (successNotice ?? this.successNotice),
+      successNotice:
+          clearNotices ? null : (successNotice ?? this.successNotice),
       errorMessage: clearNotices ? null : (errorMessage ?? this.errorMessage),
       lastSubmittedRequest: lastSubmittedRequest ?? this.lastSubmittedRequest,
     );
@@ -79,4 +80,3 @@ class LeaveState extends Equatable {
         lastSubmittedRequest,
       ];
 }
-

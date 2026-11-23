@@ -13,6 +13,7 @@ import 'features/leave/presentation/screens/holiday_hub_screen.dart';
 import 'features/leave/presentation/screens/leave_approvals_screen.dart';
 import 'features/leave/presentation/screens/leave_dashboard_screen.dart';
 import 'features/leave/presentation/screens/leave_history_screen.dart';
+import 'features/notifications/presentation/screens/notification_inbox_screen.dart';
 import 'features/profile/presentation/screens/profile_screen.dart';
 import 'features/sync/presentation/screens/sync_status_screen.dart';
 
@@ -90,6 +91,11 @@ final GoRouter appRouter = GoRouter(
       path: '/leave/approvals',
       name: 'leave_approvals',
       builder: (context, state) => const LeaveApprovalsScreen(),
+    ),
+    GoRoute(
+      path: '/notifications',
+      name: 'notifications',
+      builder: (context, state) => const NotificationInboxScreen(),
     ),
   ],
 );
