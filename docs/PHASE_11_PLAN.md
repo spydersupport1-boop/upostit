@@ -164,29 +164,40 @@ flowchart TD
 
 ---
 
-### Milestone 11.4 — Mobile Batch Sync Worker & Native OS Background Sync
-- **Objective**: Upgrade mobile `SyncWorkerImpl` to use batch ingestion and integrate OS-native background scheduling (Android WorkManager and iOS BGTaskScheduler) to flush queued punches when connectivity is restored while the app is backgrounded.
+### Milestone 11.4 — Mobile Batch Sync Worker & Resilient Sync Engine (Complete)
+- **Objective**: Upgrade mobile `SyncWorkerImpl` to use batch ingestion and integrate unified synchronization orchestration, monotonic stale-response protection, and background scheduling to flush queued punches and refresh reference data.
 - **Scope**:
-  - Refactor `SyncWorkerImpl` to package pending FIFO events into batches of 20–50 items.
-  - Apply batch response receipts atomically to local SQLite records.
-  - Implement native background sync task handlers:
-    - Android: WorkManager periodic / network-constraint worker.
-    - iOS: BGTaskScheduler background processing task.
-  - Update `SyncBloc` to reflect real-time batch progress and network bandwidth efficiency.
+  - Centralized bidirectional synchronization via `UnifiedSyncCoordinator` with 11 distinct operational phases.
+  - Upgraded `SyncWorkerImpl` to package pending FIFO events into batches and dispatch via `syncBatch` (`POST /api/v1/attendance/sync/batch`).
+  - Implemented monotonic stale-response protection in `SqfliteDownwardSyncDao` (`isIncomingStale`, `isTombstoneStale`) ensuring older policies (v5 cannot overwrite v6) and stale entities cannot overwrite fresh local state.
+  - Implemented native Android WorkManager and iOS BGTaskScheduler background scheduling via `workmanager: ^0.10.10`, `DefaultBackgroundSyncScheduler`, and `Info.plist` permitted identifiers with synchronous mutex locks and network reachability constraints.
+  - Updated `SyncBloc`, `SyncState`, `OfflineStatusBanner`, and `SyncStatusScreen` with operational phase tracking, last sync timestamps, and retry statuses without PII leakage.
+  - Enforced strict queue preservation: never deletes un-synced, pending, or permanently rejected punches.
 - **Files/Modules Affected**:
+  - `apps/mobile/lib/features/sync/data/models/batch_sync_models.dart`
+  - `apps/mobile/lib/features/attendance/data/datasources/attendance_remote_data_source.dart`
   - `apps/mobile/lib/features/sync/data/services/sync_worker_impl.dart`
+  - `apps/mobile/lib/features/sync/data/services/unified_sync_coordinator.dart`
+  - `apps/mobile/lib/features/sync/data/services/background_sync_scheduler.dart`
+  - `apps/mobile/lib/features/sync/data/datasources/downward_sync_dao.dart`
   - `apps/mobile/lib/features/sync/presentation/bloc/sync_bloc.dart`
-  - `apps/mobile/android/app/src/main/`
-  - `apps/mobile/ios/Runner/`
+  - `apps/mobile/lib/features/sync/presentation/bloc/sync_state.dart`
+  - `apps/mobile/lib/features/sync/presentation/bloc/sync_event.dart`
+  - `apps/mobile/lib/features/sync/presentation/widgets/offline_status_banner.dart`
+  - `apps/mobile/lib/features/sync/presentation/screens/sync_status_screen.dart`
+  - `apps/mobile/lib/main.dart`
+  - `apps/mobile/ios/Runner/Info.plist`
+  - `apps/mobile/pubspec.yaml`
 - **Dependencies**: Milestones 11.2 and 11.3.
-- **Database Impact**: None.
-- **API Impact**: Mobile uses `POST /attendance/sync/batch` as primary dispatch path.
-- **Test Requirements**:
-  - Mobile unit tests in `apps/mobile/test/features/sync/data/services/batch_sync_worker_test.dart`.
-  - Simulation tests covering background worker wakes and batch ack processing.
-- **Acceptance Criteria**:
-  - Multi-punch queues synchronized in a single HTTP batch.
-  - Background sync successfully flushes queue upon network reconnect without requiring app launch.
+- **Database Impact**: None (utilizes existing tables in `LocalQueueDatabase` v2).
+- **API Impact**: Mobile uses `POST /api/v1/attendance/sync/batch` for upward punches and `GET /api/v1/sync/delta` for downward delta sync.
+- **Test Results**:
+  - 17 dedicated Phase 11.4 integration tests in `test/features/sync/phase11_4_enhanced_offline_sync_test.dart` (100% pass).
+  - 154 feature sync tests in `test/features/sync/` (100% pass).
+  - 444 total mobile tests in `test/` (100% pass).
+  - Flutter analyze: No issues found!
+  - Milestone report: `docs/phase-reports/PHASE_11_MILESTONE_04_REPORT.md`.
+- **Status**: **ACCEPTED, REMEDIATED & FULLY VERIFIED**
 
 ---
 

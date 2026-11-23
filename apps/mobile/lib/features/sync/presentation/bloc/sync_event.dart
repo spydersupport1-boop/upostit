@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../data/services/unified_sync_coordinator.dart';
 import '../../domain/entities/sync_result.dart';
 
 abstract class SyncEvent extends Equatable {
@@ -102,4 +103,14 @@ class SyncRefreshConflictStatusRequested extends SyncEvent {
 
   @override
   List<Object?> get props => [tenantId, userId];
+}
+
+/// Dispatched when the unified coordinator reports operational progress.
+class SyncUnifiedProgressReceived extends SyncEvent {
+  final UnifiedSyncProgress progress;
+
+  const SyncUnifiedProgressReceived(this.progress);
+
+  @override
+  List<Object?> get props => [progress];
 }

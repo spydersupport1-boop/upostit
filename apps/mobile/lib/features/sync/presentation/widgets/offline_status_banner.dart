@@ -29,8 +29,56 @@ class OfflineStatusBanner extends StatelessWidget {
         // If connected and no pending records, keep UI clean
         if (state.isConnected &&
             state.unresolvedCount == 0 &&
-            !state.isSyncing) {
+            !state.isSyncing &&
+            !state.isAuthRequired) {
           return const SizedBox.shrink();
+        }
+
+        // Case A0: Authentication Required
+        if (state.isAuthRequired) {
+          return InkWell(
+            onTap: onTap ?? () => context.push('/login'),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.errorLight,
+                border: Border.all(
+                  color: AppColors.error.withValues(alpha: 0.3),
+                ),
+                borderRadius: AppRadius.smBorderRadius,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.lock_clock_rounded,
+                    color: AppColors.error,
+                    size: 20,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Session expired. Please log in to complete synchronization.',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Log In',
+                    style: AppTypography.buttonText.copyWith(
+                      color: AppColors.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
 
         // Case A: Disconnected / Offline Mode
@@ -123,7 +171,8 @@ class OfflineStatusBanner extends StatelessWidget {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
-                    'Synchronizing offline attendance records...',
+                    state.currentOperation ??
+                        'Synchronizing offline attendance records...',
                     style: AppTypography.bodySmall.copyWith(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w600,

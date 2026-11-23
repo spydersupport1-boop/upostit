@@ -16,6 +16,7 @@ abstract class SyncWorker {
   Future<SyncResult> synchronizeQueue({
     required String tenantId,
     required String userId,
+    bool? useBatch,
   });
 
   /// Starts listening to network connectivity events and automatically triggers

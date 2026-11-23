@@ -73,6 +73,62 @@ class SqfliteDownwardSyncDao implements DownwardSyncDao {
     });
   }
 
+  /// Helper to determine if an incoming entity update is stale compared to cached state.
+  static bool isIncomingStale({
+    required Map<String, dynamic>? existingRow,
+    required String incomingUpdatedAt,
+    int? incomingVersion,
+  }) {
+    if (existingRow == null) return false;
+
+    // 1. Monotonic version comparison if version is tracked (e.g., Attendance Policy)
+    if (incomingVersion != null && existingRow.containsKey('version')) {
+      final existingVersion = (existingRow['version'] as num?)?.toInt();
+      if (existingVersion != null) {
+        if (incomingVersion < existingVersion) {
+          return true; // Stale: incoming has lower version (e.g., version 5 cannot overwrite 6)
+        }
+        if (incomingVersion > existingVersion) {
+          return false; // Newer version
+        }
+      }
+    }
+
+    // 2. Monotonic updated_at timestamp comparison
+    final existingUpdatedStr = existingRow['updated_at'] as String?;
+    if (existingUpdatedStr != null && existingUpdatedStr.isNotEmpty) {
+      final existingDt = DateTime.tryParse(existingUpdatedStr);
+      final incomingDt = DateTime.tryParse(incomingUpdatedAt);
+      if (existingDt != null && incomingDt != null) {
+        if (incomingDt.isBefore(existingDt)) {
+          return true; // Stale: incoming has older timestamp
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /// Helper to determine if a tombstone deletion is stale compared to cached state.
+  static bool isTombstoneStale({
+    required Map<String, dynamic>? existingRow,
+    required String tombstoneDeletedAt,
+  }) {
+    if (existingRow == null) return false;
+    final existingUpdatedStr = existingRow['updated_at'] as String?;
+    if (existingUpdatedStr != null && existingUpdatedStr.isNotEmpty) {
+      final existingDt = DateTime.tryParse(existingUpdatedStr);
+      final tombstoneDt = DateTime.tryParse(tombstoneDeletedAt);
+      if (existingDt != null && tombstoneDt != null) {
+        // If entity was modified after the deletion timestamp, tombstone is stale!
+        if (existingDt.isAfter(tombstoneDt)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   @override
   Future<void> applyDeltaTransactionally(SyncDeltaModel delta) async {
     final db = await _db;
@@ -82,15 +138,29 @@ class SqfliteDownwardSyncDao implements DownwardSyncDao {
       String tenantId = '';
       String employeeId = '';
 
-      // 1. Employee Profile Upsert
+      // 1. Employee Profile Upsert with Stale Protection
       if (delta.employee != null) {
         tenantId = delta.employee!.tenantId;
         employeeId = delta.employee!.id;
-        await txn.insert(
+
+        final existing = await txn.query(
           LocalQueueDatabase.cachedEmployeeTable,
-          delta.employee!.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
+          where: 'id = ?',
+          whereArgs: [delta.employee!.id],
+          limit: 1,
         );
+        final existingRow = existing.isNotEmpty ? existing.first : null;
+
+        if (!isIncomingStale(
+          existingRow: existingRow,
+          incomingUpdatedAt: delta.employee!.updatedAt,
+        )) {
+          await txn.insert(
+            LocalQueueDatabase.cachedEmployeeTable,
+            delta.employee!.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
       } else {
         // Fallback: retrieve existing cached employee tenant/id if available
         final existingEmp = await txn.query(
@@ -103,118 +173,225 @@ class SqfliteDownwardSyncDao implements DownwardSyncDao {
         }
       }
 
-      // 2. Shifts Upsert
+      // 2. Shifts Upsert with Stale Protection
       for (final shift in delta.shifts) {
-        await txn.insert(
+        final existing = await txn.query(
           LocalQueueDatabase.cachedShiftsTable,
-          shift.toMap(tenantId),
-          conflictAlgorithm: ConflictAlgorithm.replace,
+          where: 'id = ?',
+          whereArgs: [shift.id],
+          limit: 1,
         );
-      }
+        final existingRow = existing.isNotEmpty ? existing.first : null;
 
-      // 3. Workplaces & Geofences Upsert
-      for (final wp in delta.workplaces) {
-        await txn.insert(
-          LocalQueueDatabase.cachedWorkplacesTable,
-          wp.toMap(tenantId),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      // 4. Holidays Upsert
-      for (final hol in delta.holidays) {
-        await txn.insert(
-          LocalQueueDatabase.cachedHolidaysTable,
-          hol.toMap(tenantId),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      // 5. Leave Types Upsert
-      for (final lt in delta.leaveTypes) {
-        await txn.insert(
-          LocalQueueDatabase.cachedLeaveTypesTable,
-          lt.toMap(tenantId),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      // 6. Leave Balances Upsert
-      for (final lb in delta.leaveBalances) {
-        await txn.insert(
-          LocalQueueDatabase.cachedLeaveBalancesTable,
-          lb.toMap(tenantId, employeeId),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      // 7. Leave Requests Upsert
-      for (final lr in delta.leaveRequests) {
-        await txn.insert(
-          LocalQueueDatabase.cachedLeaveRequestsTable,
-          lr.toMap(tenantId, employeeId),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      // 8. Attendance Policy Upsert
-      if (delta.attendancePolicy != null) {
-        await txn.insert(
-          LocalQueueDatabase.cachedAttendancePolicyTable,
-          delta.attendancePolicy!.toMap(tenantId),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      // 9. Direct Reports Upsert
-      if (delta.reportingHierarchy != null) {
-        for (final dr in delta.reportingHierarchy!.directReports) {
+        if (!isIncomingStale(
+          existingRow: existingRow,
+          incomingUpdatedAt: shift.updatedAt,
+        )) {
           await txn.insert(
-            LocalQueueDatabase.cachedDirectReportsTable,
-            dr.toMap(tenantId),
+            LocalQueueDatabase.cachedShiftsTable,
+            shift.toMap(tenantId),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
       }
 
-      // 10. Process Tombstones
+      // 3. Workplaces & Geofences Upsert with Stale Protection
+      for (final wp in delta.workplaces) {
+        final existing = await txn.query(
+          LocalQueueDatabase.cachedWorkplacesTable,
+          where: 'id = ?',
+          whereArgs: [wp.id],
+          limit: 1,
+        );
+        final existingRow = existing.isNotEmpty ? existing.first : null;
+
+        if (!isIncomingStale(
+          existingRow: existingRow,
+          incomingUpdatedAt: wp.updatedAt,
+        )) {
+          await txn.insert(
+            LocalQueueDatabase.cachedWorkplacesTable,
+            wp.toMap(tenantId),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      // 4. Holidays Upsert with Stale Protection
+      for (final hol in delta.holidays) {
+        final existing = await txn.query(
+          LocalQueueDatabase.cachedHolidaysTable,
+          where: 'id = ?',
+          whereArgs: [hol.id],
+          limit: 1,
+        );
+        final existingRow = existing.isNotEmpty ? existing.first : null;
+
+        if (!isIncomingStale(
+          existingRow: existingRow,
+          incomingUpdatedAt: hol.updatedAt,
+        )) {
+          await txn.insert(
+            LocalQueueDatabase.cachedHolidaysTable,
+            hol.toMap(tenantId),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      // 5. Leave Types Upsert with Stale Protection
+      for (final lt in delta.leaveTypes) {
+        final existing = await txn.query(
+          LocalQueueDatabase.cachedLeaveTypesTable,
+          where: 'id = ?',
+          whereArgs: [lt.id],
+          limit: 1,
+        );
+        final existingRow = existing.isNotEmpty ? existing.first : null;
+
+        if (!isIncomingStale(
+          existingRow: existingRow,
+          incomingUpdatedAt: lt.updatedAt,
+        )) {
+          await txn.insert(
+            LocalQueueDatabase.cachedLeaveTypesTable,
+            lt.toMap(tenantId),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      // 6. Leave Balances Upsert with Stale Protection
+      for (final lb in delta.leaveBalances) {
+        final existing = await txn.query(
+          LocalQueueDatabase.cachedLeaveBalancesTable,
+          where: 'id = ?',
+          whereArgs: [lb.id],
+          limit: 1,
+        );
+        final existingRow = existing.isNotEmpty ? existing.first : null;
+
+        if (!isIncomingStale(
+          existingRow: existingRow,
+          incomingUpdatedAt: lb.updatedAt,
+        )) {
+          await txn.insert(
+            LocalQueueDatabase.cachedLeaveBalancesTable,
+            lb.toMap(tenantId, employeeId),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      // 7. Leave Requests Upsert with Stale Protection
+      for (final lr in delta.leaveRequests) {
+        final existing = await txn.query(
+          LocalQueueDatabase.cachedLeaveRequestsTable,
+          where: 'id = ?',
+          whereArgs: [lr.id],
+          limit: 1,
+        );
+        final existingRow = existing.isNotEmpty ? existing.first : null;
+
+        if (!isIncomingStale(
+          existingRow: existingRow,
+          incomingUpdatedAt: lr.updatedAt,
+        )) {
+          await txn.insert(
+            LocalQueueDatabase.cachedLeaveRequestsTable,
+            lr.toMap(tenantId, employeeId),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      // 8. Attendance Policy Upsert with Monotonic Version Protection
+      if (delta.attendancePolicy != null) {
+        final existing = await txn.query(
+          LocalQueueDatabase.cachedAttendancePolicyTable,
+          where: 'id = ?',
+          whereArgs: [delta.attendancePolicy!.id],
+          limit: 1,
+        );
+        final existingRow = existing.isNotEmpty ? existing.first : null;
+
+        if (!isIncomingStale(
+          existingRow: existingRow,
+          incomingUpdatedAt: delta.attendancePolicy!.updatedAt,
+          incomingVersion: delta.attendancePolicy!.version,
+        )) {
+          await txn.insert(
+            LocalQueueDatabase.cachedAttendancePolicyTable,
+            delta.attendancePolicy!.toMap(tenantId),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      // 9. Direct Reports Upsert with Stale Protection
+      if (delta.reportingHierarchy != null) {
+        for (final dr in delta.reportingHierarchy!.directReports) {
+          final existing = await txn.query(
+            LocalQueueDatabase.cachedDirectReportsTable,
+            where: 'id = ?',
+            whereArgs: [dr.id],
+            limit: 1,
+          );
+          final existingRow = existing.isNotEmpty ? existing.first : null;
+
+          if (!isIncomingStale(
+            existingRow: existingRow,
+            incomingUpdatedAt: dr.updatedAt,
+          )) {
+            await txn.insert(
+              LocalQueueDatabase.cachedDirectReportsTable,
+              dr.toMap(tenantId),
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        }
+      }
+
+      // 10. Process Tombstones with Monotonic Stale Protection
       for (final tomb in delta.tombstones) {
+        String targetTable = '';
         switch (tomb.entityType) {
           case 'shift':
-            await txn.delete(
-              LocalQueueDatabase.cachedShiftsTable,
-              where: 'id = ?',
-              whereArgs: [tomb.entityId],
-            );
+            targetTable = LocalQueueDatabase.cachedShiftsTable;
             break;
           case 'workplace':
-            await txn.delete(
-              LocalQueueDatabase.cachedWorkplacesTable,
-              where: 'id = ?',
-              whereArgs: [tomb.entityId],
-            );
+            targetTable = LocalQueueDatabase.cachedWorkplacesTable;
             break;
           case 'holiday':
-            await txn.delete(
-              LocalQueueDatabase.cachedHolidaysTable,
-              where: 'id = ?',
-              whereArgs: [tomb.entityId],
-            );
+            targetTable = LocalQueueDatabase.cachedHolidaysTable;
             break;
           case 'leave_request':
-            await txn.delete(
-              LocalQueueDatabase.cachedLeaveRequestsTable,
-              where: 'id = ?',
-              whereArgs: [tomb.entityId],
-            );
+            targetTable = LocalQueueDatabase.cachedLeaveRequestsTable;
             break;
           case 'leave_balance':
+            targetTable = LocalQueueDatabase.cachedLeaveBalancesTable;
+            break;
+        }
+
+        if (targetTable.isNotEmpty) {
+          final existing = await txn.query(
+            targetTable,
+            where: 'id = ?',
+            whereArgs: [tomb.entityId],
+            limit: 1,
+          );
+          final existingRow = existing.isNotEmpty ? existing.first : null;
+
+          if (!isTombstoneStale(
+            existingRow: existingRow,
+            tombstoneDeletedAt: tomb.deletedAt,
+          )) {
             await txn.delete(
-              LocalQueueDatabase.cachedLeaveBalancesTable,
+              targetTable,
               where: 'id = ?',
               whereArgs: [tomb.entityId],
             );
-            break;
+          }
         }
       }
 
