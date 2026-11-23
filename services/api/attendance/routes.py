@@ -18,6 +18,8 @@ from services.api.attendance.correction_service import (
     get_attendance_day_event_audit_trail,
     list_attendance_corrections,
 )
+from services.api.attendance.downward_sync_schemas import SyncDeltaResponse
+from services.api.attendance.downward_sync_service import process_downward_delta_sync
 from services.api.attendance.models import TenantAttendancePolicy
 from services.api.attendance.policy_engine import (
     create_new_policy_version,
@@ -26,6 +28,8 @@ from services.api.attendance.policy_engine import (
 )
 from services.api.attendance.reconciliation import run_attendance_reconciliation
 from services.api.attendance.schemas import (
+    AttendanceBatchSyncRequest,
+    AttendanceBatchSyncResponse,
     AttendanceCombinationRule,
     AttendanceConflictDecisionRequest,
     AttendanceConflictDecisionResponse,
@@ -83,6 +87,7 @@ from services.api.attendance.service import (
     update_shift_assignment,
     update_shift_template,
 )
+from services.api.attendance.sync_service import process_attendance_batch_sync
 from services.api.auth.dependencies import (
     AuthenticatedContext,
     get_authenticated_context,
@@ -377,6 +382,59 @@ async def punch_endpoint(
         user_id=ctx.user.id,
         user_role=ctx.user.role,
         payload=payload,
+    )
+
+
+@attendance_router.post(
+    "/sync/batch",
+    response_model=AttendanceBatchSyncResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Batch synchronize queued offline attendance punches",
+    dependencies=[Depends(require_permission(Permission.RECORD_PUNCH))],
+)
+async def batch_sync_endpoint(
+    payload: AttendanceBatchSyncRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> AttendanceBatchSyncResponse:
+    """Batch synchronizes up to 50 queued offline attendance punches with individual event receipts.
+
+    Guarantees:
+    - Independent item validation supporting partial batch success.
+    - Idempotent deduplication for intra-batch and cross-batch retries.
+    - Strict employee ownership enforcement (employee can only sync their own punches).
+    - Timestamp semantic hardening: validated offline punches are assigned their device timestamp for effective_at.
+    - State machine validation and cascading sequence conflict detection.
+    """
+    return await process_attendance_batch_sync(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=ctx.user.id,
+        user_role=ctx.user.role,
+        payload=payload,
+    )
+
+
+@attendance_router.get(
+    "/sync/delta",
+    response_model=SyncDeltaResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Download reference data deltas and shift rosters (attendance alias)",
+    dependencies=[Depends(require_permission(Permission.VIEW_OWN_PROFILE))],
+)
+async def attendance_downward_sync_alias_endpoint(
+    cursor: str | None = Query(None, description="Opaque server-generated cursor token from previous sync"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum items per page"),
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> SyncDeltaResponse:
+    """Retrieves reference data deltas and shift rosters (attendance route alias)."""
+    return await process_downward_delta_sync(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=ctx.user.id,
+        cursor=cursor,
+        limit=limit,
     )
 
 

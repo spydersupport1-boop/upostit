@@ -61,7 +61,8 @@ class _HolidayHubScreenState extends State<HolidayHubScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: AppColors.info, size: 20),
+                      const Icon(Icons.info_outline,
+                          color: AppColors.info, size: 20),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(

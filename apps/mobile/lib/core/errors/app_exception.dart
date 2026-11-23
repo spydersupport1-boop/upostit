@@ -54,3 +54,11 @@ class QueueCapacityExceededException extends AppException {
       [super.message =
           'Local offline queue capacity exceeded (maximum 500 pending events).']);
 }
+
+class ApiGapException extends AppException {
+  const ApiGapException([
+    super.message =
+        'This operation is not currently supported by the backend API.',
+    int? statusCode = 404,
+  ]) : super(statusCode: statusCode);
+}

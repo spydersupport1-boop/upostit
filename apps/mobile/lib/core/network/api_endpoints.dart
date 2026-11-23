@@ -46,4 +46,16 @@ class ApiEndpoints {
 
   // Holiday routes (/api/v1/holidays)
   static const String holidaysUpcoming = '/api/v1/holidays/upcoming';
+
+  // Notification routes (/api/v1/notifications)
+  static const String notificationDevices = '/api/v1/notifications/devices';
+  static const String notificationDevicesRevoke =
+      '/api/v1/notifications/devices/revoke';
+  static String notificationDeviceByHash(String tokenHash) =>
+      '/api/v1/notifications/devices/$tokenHash';
+  static const String notificationInbox = '/api/v1/notifications/inbox';
+
+  // Synchronization routes (/api/v1/sync)
+  static const String syncDelta = '/api/v1/sync/delta';
+  static const String syncBatch = '/api/v1/attendance/sync/batch';
 }

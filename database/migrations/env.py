@@ -44,6 +44,12 @@ from services.api.leave.models import (  # noqa: F401
     OvertimeRule,
 )
 from services.api.locations.models import EmployeeLocation, Location
+from services.api.notifications.models import (  # noqa: F401
+    DevicePushToken,
+    Notification,
+    NotificationPreference,
+    NotificationTemplate,
+)
 from services.api.organization.models import Department, Designation
 from services.api.tenants.models import Tenant
 

@@ -21,7 +21,8 @@
   - **Backend API**: High-performance Python 3.12 + FastAPI modular monolith providing REST APIs, authentication, rule evaluation, and integration endpoints.
   - **Future Integrations**: On-premise biometric hardware terminals (HMAC-signed), BLE/NFC office beacons, and edge CCTV gateway stream processing (Python + OpenCV + GStreamer).
 - **Current Stage**: **Stage B: Attendance Core**
-- **Current Phase**: **Phase 9 — Leave, Holidays and Overtime Multipliers** (Status: *Phase 9 (Milestones 9.1 through 9.8) Completed, Audited & Formally Closed on branch phase-06; Closure Outcome: B [Implementation complete, infrastructure validation outstanding]; 655 backend tests, 376 Flutter tests, and 104 Web tests passing (100%), total 1,135 automated tests; ready for Phase 10 review*)
+- **Current Phase**: **Phase 10 — Notifications (Outbound Alerts)** (Status: *Milestones 10.1 through 10.8 Completed, Formally Closed under Outcome B [Conditionally Closed] on branch phase-06: 4 database models, Alembic migration `b5c6d7e8f9a0`, Row-Level Security policies, safe template renderer, preference resolver, quiet hours evaluator [all categories strictly respect quiet hours without bypass], mock providers, repository & dispatcher; Firebase Cloud Messaging [FCM] adapter, Fernet token authenticated encryption, mobile device token registration APIs, Celery dispatch workers; 13 business domain events, 23 canonical default templates, transactional outbox pattern, secret protection; Next.js 14 Web Console for notification administration [overview metrics, template overrides with safe variable guidance, PUT endpoint for editing tenant overrides, strict system template immutability, channel readiness indicators with CONFIGURED_UNVERIFIED taxonomy, tenant preferences with quiet hours & RBAC, filterable paginated activity log with inspection drawer]; Flutter Mobile Push Token Lifecycle & In-App Notification Center [Android 13+ & iOS permissions, secure device token registration, token deduplication caching, automatic rotation on refresh, logout revocation, top-level background handler, in-app notification center screen with unread badge, All/Unread filter chips, detail dialog, documented backend inbox 404 API gap handling, safe deep link whitelist, sensitive data redaction]; End-to-End Simulation, Chaos Testing & Multi-Tenant Validation [Leave, Conflicts, Fraud Shield, Invitations, and Password Reset lifecycle simulations; Transaction rollback atomicity, Celery/Redis failure non-blocking fallback, stuck worker recovery, provider timeouts and exponential backoff, worker concurrency atomic lock, cross-tenant data/template/token/preference isolation, RBAC and PostgreSQL RLS verification, cross-platform web/mobile simulation]; Security Audit & Penetration Testing [RBAC hardening on admin endpoints, template SSTI pre-validation against dunder expressions, device token length boundary enforcement, client-side web privilege guards, secret credential masking]; 178 Phase 10 backend tests passing [100%], 833 total backend tests passing [100%], 412 Flutter tests passing [100%], 132 web tests passing [100%], grand total 1,377 automated tests across monorepo; Outcome B due to host lacking live PostgreSQL/Redis daemons and physical mobile hardware; awaiting authorization for Phase 11*)
+- **Current Phase**: **Phase 11 — Offline-First Sync Engine & Advanced Conflict Resolution** (Status: *Milestones 11.1, 11.2, and 11.3 Completed, Audited & Verified on branch phase-06: Architecture assessment & blueprint [11.1]; Batch sync protocol `POST /attendance/sync/batch`, savepoint transaction isolation, dual-tier idempotency, timestamp semantic hardening, zero synthetic break-end events, manager direct-report scoping [11.2]; Downward delta sync protocol `GET /sync/delta` and alias `GET /attendance/sync/delta`, composite keyset pagination v2, frozen session snapshot isolation (`session_ts`), HMAC-SHA256 tamper-resistant cursors, key rotation with fallback keys, TTL expiration, tenant and user context verification, deactivation and soft-deletion semantics, workplace tombstones across page boundaries, mobile SQLite schema upgrade to version 2 with 10 versioned cache tables, queue preservation invariant, atomic transactional delta application, mobile sync coordinator with concurrency mutex, pagination loop, self-healing cursor reset [11.3]; 879 backend tests passing [100%], 427 Flutter tests passing [100%], 132 web tests passing [100%], grand total 1,438 automated tests passing 100% across monorepo; 0 Ruff issues, 0 Flutter analyzer issues; awaiting authorization for Milestone 11.4*)
 
 ---
 
@@ -1849,22 +1850,340 @@ API_BASE_URL=http://localhost:8000
      - **1,135 total automated tests passing (100% pass rate)**: 655 backend pytest tests (121 Phase 9), 104 Next.js web tests, and 376 Flutter mobile tests.
 - **Report**: [`docs/phase-reports/PHASE_09_MILESTONE_08_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_09_MILESTONE_08_REPORT.md)
 
+### 11.11 Phase 10 Scope Verification & Authorization
+- **Scope Verification Report**: [`docs/phase-reports/PHASE_10_SCOPE_VERIFICATION_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_SCOPE_VERIFICATION_REPORT.md)
+- **Authoritative Scope Reconciled**: Reconciled the scope discrepancy between earlier documentation ("Outbound Alerts") and the Phase 9.8 report ("Payroll Integration"). Confirmed Phase 10 is **Notifications (Outbound Alerts)** per the original 22-phase roadmap, Section 5.4, and `ARCHITECTURE.md` Section 4. Payroll is assigned to Phase 14.
+- **Approved Roadmap Breakdown**:
+  - Milestone 10.1: Notification Database Architecture, Models & Alembic Migration (COMPLETED)
+  - Milestone 10.2: Core Dispatch Engine & Notification Repository
+  - Milestone 10.3: Push Notification Provider (FCM Adapter & Token Registration)
+  - Milestone 10.4: Email & SMS Notification Providers (SMTP / Gateway Adapters)
+  - Milestone 10.5: Domain Event Triggers & Integration Hooks
+  - Milestone 10.6: Web Console Management UI (Templates, Preferences, Delivery Logs)
+  - Milestone 10.7: Flutter Mobile Push & In-App Notification Center
+  - Milestone 10.8: End-to-End Simulation, Security Audit & Phase 10 Verification
+
+### 11.12 Phase 10 Milestone 10.1 Summary: Notification Database Foundation
+- **Delivered**:
+  1. **SQLAlchemy 2.0 Models (`services/api/notifications/models.py`)**:
+     - `NotificationTemplate` (`notification_templates`): System-defined default templates (`tenant_id IS NULL`) and tenant overrides; partial unique indexes.
+     - `NotificationPreference` (`notification_preferences`): Tenant fallback defaults (`user_id IS NULL`) and user-level overrides (`user_id=<uuid>`); quiet-hours format `HH:MM` and timezone support.
+     - `Notification` (`notifications`): Outbound dispatch requests and persistent audit ledger; lifecycle status checks (`PENDING`, `PROCESSING`, `RETRY_SCHEDULED`, `SENT`, `DELIVERED`, `FAILED`, `CANCELLED`); priority levels; worker queue index; tenant idempotency partial index; audit preservation via `ondelete="SET NULL"` on recipient foreign keys.
+     - `DevicePushToken` (`device_push_tokens`): FCM device registration tokens with SHA-256 `token_hash`, active status partial unique index, rotation and revocation support.
+  2. **Alembic Migration (`database/migrations/versions/b5c6d7e8f9a0_phase_10_notifications.py`)**:
+     - Revision ID `b5c6d7e8f9a0` chained linearly to head `a4b5c6d7e8f9`.
+     - Enables and forces Row Level Security (RLS) on all 4 tables.
+     - Multi-tenant read and write policies distinguishing system templates from tenant modifications.
+     - Fully reversible downgrade script.
+  3. **Alembic Configuration (`database/migrations/env.py`)**:
+     - Registered all 4 models on `Base.metadata`.
+     - Single head confirmed: `b5c6d7e8f9a0 (head)`.
+  4. **Automated Test Suite (`tests/test_phase10_database_models_and_migration.py`)**:
+     - 20 unit and contract tests verifying migration chain, model constraints, partial unique indexes, RLS script DDL, and audit preservation.
+     - **20 passed in 0.94s (100% pass rate)**.
+- **Report**: [`docs/phase-reports/PHASE_10_MILESTONE_01_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_MILESTONE_01_REPORT.md)
+
+### 11.13 Phase 10 Milestone 10.2 Summary: Core Notification Dispatch Engine & Repository
+- **Delivered**:
+  1. **Notification Backend Package (`services/api/notifications/`)**:
+     - `exceptions.py`: Typed domain exceptions (`TemplateNotFoundError`, `TemplateRenderError`, `RecipientNotFoundError`, `ChannelDisabledError`, `QuietHoursDeferredError`, `DuplicateNotificationError`, `InvalidStateTransitionError`, `ProviderError`, `ProviderTimeoutError`).
+     - `schemas.py`: Pydantic V2 schemas and string enums (`NotificationChannel`, `NotificationStatus`, `NotificationPriority`, `DevicePlatform`, `DeviceTokenStatus`, `ProviderStatus`, `NotificationCreateRequest`, `NotificationResponse`, `ProviderResult`, `DispatchResult`).
+     - `template_renderer.py` (`SafeTemplateRenderer`): Safe restricted parameter substitution; strict prohibition of Python `eval`/`exec`/dunders; context-aware HTML entity escaping and subject CRLF injection stripping.
+     - `preference_resolver.py` (`PreferenceResolver`): Hierarchical resolution (User override -> Tenant default -> System fallback); audit logging of channel skip reasons.
+     - `quiet_hours.py` (`QuietHoursEvaluator`): Timezone-aware quiet-hours evaluator supporting daytime and overnight intervals, exact boundaries, DST handling, and urgent priority bypass.
+     - `provider.py` (`BaseNotificationProvider`): Channel provider abstraction; `MockPushProvider`, `MockEmailProvider`, and `MockSmsProvider` simulating acceptance, transient retryable failures, unretryable rejections, invalid tokens, and timeouts; token hashing (`hash_push_token`) and encryption at rest (`encrypt_token_at_rest`).
+     - `repository.py` (`NotificationRepository`): Async repository supporting tenant-isolated queries, idempotency checks, atomic status transition (`claim_for_processing`), retry scheduling, permanent failure recording, recipient pagination, template fallback, preference upsert, and device token rotation/revocation.
+     - `service.py` (`NotificationService`): Creation service resolving recipient destinations (user email, employee phone, active FCM token), evaluating preferences, rendering templates, and scheduling initial quiet-hours deferrals.
+     - `dispatcher.py` (`NotificationDispatcher`): Core dispatch orchestrator handling atomic claims, quiet hours re-evaluation, provider invocation, exponential backoff calculation (60s, 120s, 240s... capped at 1h), and delivery lifecycle tracking (SENT vs DELIVERED).
+  2. **Automated Test Suite (`tests/test_phase10_milestone2_dispatch_engine.py`)**:
+     - 37 dedicated unit and contract tests verifying template safety, preference hierarchy, quiet-hours boundaries, mock provider behaviors, repository idempotency, and dispatch lifecycles.
+     - **37 passed in 2.62s (100% pass rate)**.
+- **Report**: [`docs/phase-reports/PHASE_10_MILESTONE_02_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_MILESTONE_02_REPORT.md)
+
+### 11.14 Phase 10 Milestone 10.3 Summary: FCM Push Integration, Device Token Registration APIs & Celery Dispatch Workers
+- **Delivered**:
+  1. **Firebase Cloud Messaging Adapter (`services/api/notifications/fcm_provider.py`)**:
+     - Official Google Firebase Admin SDK (`firebase-admin`) adapter implementing `BaseNotificationProvider`.
+     - Android configuration: high priority, `upostit_alerts` notification channel, sound, `FLUTTER_NOTIFICATION_CLICK`.
+     - iOS APNs configuration: priority 10, APS alert payload, sound, badge 1.
+     - Normalized `ProviderResult`: status `ACCEPTED`, `provider_message_id`, raw provider payload (`SENT != DELIVERED`).
+     - Error classification: `UnregisteredError`/`SenderIdMismatchError`/`NotFoundError` -> unretryable; `QuotaExceededError`/`UnavailableError`/`DeadlineExceededError` -> retryable; `TimeoutError` -> `ProviderTimeoutError`.
+     - Safe fallback: falls back to `MockPushProvider` when `FCM_ENABLED=False`.
+  2. **Authenticated Token Encryption at Rest (`services/api/notifications/crypto.py`)**:
+     - Vetted `cryptography.fernet.Fernet` implementing AES-128-CBC + HMAC-SHA256 authenticated encryption.
+     - Key derivation via `PBKDF2HMAC` (SHA-256, 100,000 iterations) from secret key.
+     - Strict `fernet:` prefix enforcement and zero plaintext fallback; tampered payloads fail MAC verification.
+     - Safe display masking (`mask_token_for_display`) ensuring raw push tokens never appear in logs or API responses.
+  3. **Device Push Token Registration & Management APIs (`services/api/notifications/routes.py`)**:
+     - `POST /api/v1/notifications/devices`: Register or rotate device push token for authenticated user and tenant context; encrypts token, stores SHA-256 hash, invalidates superseded tokens for the same physical device ID.
+     - `GET /api/v1/notifications/devices`: List active device tokens with masked preview for current authenticated user.
+     - `DELETE /api/v1/notifications/devices/{token_hash}`: Revoke device push token by hash.
+     - `POST /api/v1/notifications/devices/revoke`: Revoke device push token by raw token value or hash.
+     - Strict tenant and user isolation: derived strictly from `AuthenticatedContext`.
+  4. **Celery Asynchronous Notification Workers (`services/workers/notification_tasks.py`)**:
+     - `notifications.dispatch_single`: Atomically claims and dispatches a single notification.
+     - `notifications.dispatch_batch`: Bounded batch dispatch querying pending notifications.
+     - `notifications.process_retries`: Enqueues notifications in `RETRY` where `next_retry_at <= now()`.
+     - `notifications.reconcile_stuck_processing`: Recovers crashed notifications stuck in `PROCESSING` (> 15m).
+     - `notifications.cleanup_revoked_tokens`: Purges inactive/revoked device tokens older than 90 days.
+     - Exponential backoff with jitter and dead-letter preservation upon reaching `max_attempts=3`.
+  5. **Quiet-Hours Compliance**:
+     - Removed unconditional URGENT bypass; quiet hours strictly respected per roadmap instructions.
+  6. **Automated Test Suite (`tests/test_phase10_milestone3_fcm_and_celery.py`)**:
+     - 19 comprehensive unit and contract tests verifying FCM adapter error classification, Android/iOS configurations, token registration APIs, Celery workers, and Fernet authenticated encryption.
+     - **19 passed in 6.36s (100% pass rate)**.
+- **Report**: [`docs/phase-reports/PHASE_10_MILESTONE_03_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_MILESTONE_03_REPORT.md)
+
+### 11.15 Phase 10 Milestone 10.4 Summary: Domain Event Triggers & Notification Integration
+- **Delivered**:
+  1. **Typed Domain Event Schemas (`services/api/notifications/events.py`)**:
+     - 13 strongly-typed Pydantic V2 domain events (`DomainEvent`, `LeaveRequestSubmittedEvent`, `LeaveRequestApprovedEvent`, `LeaveRequestRejectedEvent`, `LeaveRequestCancelledEvent`, `OfflineConflictSubmittedEvent`, `AttendanceConflictApprovedEvent`, `AttendanceConflictRejectedEvent`, `HighRiskFraudAlertEvent`, `ImpossibleTravelSignalEvent`, `MockGpsDetectedEvent`, `EmployeeInvitationCreatedEvent`, `EmployeeInvitationSentEvent`, `PasswordResetRequestedEvent`).
+     - Standardized event metadata: `tenant_id`, `event_id`, `correlation_id`, `occurred_at`, `actor_user_id`.
+  2. **Canonical System Default Templates (`services/api/notifications/default_templates.py`)**:
+     - 23 canonical system default templates for all 13 domain events (10 events with both EMAIL and PUSH = 20 templates; 3 events with EMAIL only = 3 templates; SMS is intentionally not configured in this phase).
+     - Fallback mechanism in `NotificationRepository.get_template` guarantees zero template miss errors if tenant customization does not exist.
+  3. **Domain Notification Handler (`services/api/notifications/event_handler.py`)**:
+     - `DomainNotificationHandler`: Orchestrates recipient resolution, preference filtering, and notification creation.
+     - Recipient resolution: hierarchy resolution for reporting managers (`Employee.reporting_manager_id`) with fallback to tenant owners/admins (`User.role IN ('owner', 'admin')`).
+     - Preference filtering: user override and tenant default channel opt-out enforcement.
+     - Quiet-hours scheduling: all notification categories (including fraud alerts and password resets) strictly respect recipient quiet hours without bypass. Non-urgent and urgent events during quiet hours are scheduled for the next eligible dispatch time (morning 07:00).
+     - Deterministic idempotency keys: `{event_type}:{entity_id}:{recipient}:{channel}` format preventing duplicate notifications.
+  4. **Transactional Outbox Architecture**:
+     - Atomic staging: `dispatch_domain_event` stages notifications directly into the database within the calling transaction.
+     - Rollback resilience: if the business transaction fails, the staged notification rolls back atomically (zero orphan notifications).
+     - Asynchronous dispatch: post-transaction helper `enqueue_celery_dispatch` enqueues background delivery with zero-loss fallback.
+     - At-least-once delivery guarantee: provider failure transitions notification to `RETRY_SCHEDULED`, never affecting the already-committed business record.
+  5. **Strict Secret Protection**:
+     - Zero raw tokens or credential hashes in `payload_json`, subjects, or body text.
+     - Action tokens strictly delivered in single-use HTTPS URLs (`activation_url`, `reset_url`).
+  6. **Business Domain Integration Hooks**:
+     - Phase 9 Leave: `leave_request_service.py` (submitted, approved, rejected, cancelled).
+     - Phase 8 Attendance Conflicts: `conflict_service.py` (submitted, approved, rejected).
+     - Phase 7 Fraud Shield: `attendance/service.py` (high risk score, impossible travel velocity, mock GPS).
+     - Phase 4 Invitations: `invitation_service.py` (invitation created, resend).
+     - Phase 2 Auth: `auth/service.py` (`request_password_reset` service helper; full user-facing password reset route and token model documented as pending).
+  7. **Automated Test Suite (`tests/test_phase10_milestone4_domain_events.py`)**:
+     - 23 comprehensive unit and integration tests verifying all 13 events, outbox rollback, idempotency replay, secret hygiene, quiet hours deferral (including fraud and password reset), user preference opt-outs, provider failure isolation, and cross-tenant isolation.
+     - **23 passed in 4.80s (100% pass rate)**.
+- **Report**: [`docs/phase-reports/PHASE_10_MILESTONE_04_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_MILESTONE_04_REPORT.md)
+
+### 11.5 Milestone 10.5 — Next.js Web Console: Notification Administration (Completed & Fully Verified 2026-11-22)
+- **Key Deliverables**:
+  1. **Next.js App Router Page (`apps/web/src/app/notifications/page.tsx`)**:
+     - Dedicated Notification Administration Console with 5 operational views: Overview, Templates, Channels, Preferences, and Activity Log.
+     - Overview: metrics cards (Total, Sent, Delivered, In-Flight, Failed), visual SENT vs DELIVERED milestone distinction banner, lifecycle status breakdown, and channel traffic distribution.
+     - Templates: catalog table distinguishing `🌐 System Default` from `🏢 Tenant Override`; template inspection and customization modal with safe variable documentation based on domain event schemas; system default immutability protection with tenant-level overrides via `PUT /templates/{id}`; zero credential leakage.
+     - Channels: real-time readiness dashboard reflecting runtime FCM, SMTP, and deferred SMS capabilities with `CONFIGURED_UNVERIFIED` / `MOCK` / `UNCONFIGURED` status taxonomy (never displaying "Active (Production)" for unverified gateways).
+     - Preferences: tenant-wide default communication rules (channel enable toggles, quiet-hours windows in 24h `HH:MM` format, timezone selector); strict RBAC enforcement (read-only for non-admins).
+     - Activity Log: filterable (status, channel, event type), paginated activity table with detail inspection modal displaying full delivery timeline, masked destination, provider acknowledgment, and sanitized bodies.
+  2. **Frontend API Client (`apps/web/src/lib/api.ts`)**:
+     - Added typed DTOs and `notificationApi` methods (`getOverview`, `getTemplates`, `createOrUpdateTemplate`, `updateTemplate`, `getPreferences`, `updatePreferences`, `getChannels`, `getActivity`).
+  3. **Backend Administrative Endpoints (`services/api/notifications/routes.py`, `schemas.py`, `repository.py`, `main.py`)**:
+     - Router registered in FastAPI `main.py` under `api_v1_router` (`/api/v1/notifications`).
+     - Added REST endpoints: `GET /overview`, `GET /templates`, `POST /templates`, `PUT /templates/{template_id}`, `GET /preferences`, `PUT /preferences`, `GET /channels`, `GET /activity`.
+     - System template immutability enforced (403 Forbidden when attempting to update system templates in-place).
+     - Cross-tenant isolation enforced (404 Not Found on cross-tenant template updates).
+     - Enforced `require_roles(UserRole.OWNER, UserRole.ADMIN)` on preference updates and `require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR)` on template overrides.
+  4. **Automated Test Suites & Static Verification**:
+     - Frontend: `apps/web/src/lib/notification-console.test.ts` (15 dedicated tests, 100% pass; 119 total web unit tests passing).
+     - Backend: `tests/test_phase10_milestone5_web_routes.py` (21 dedicated integration & security tests, 100% pass; 120 total Phase 10 backend tests passing).
+     - Static checks: Next.js build passed with 15/15 static pages prerendered; ESLint 0 errors / 0 warnings; Ruff 0 errors.
+- **Report**: [`docs/phase-reports/PHASE_10_MILESTONE_05_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_MILESTONE_05_REPORT.md)
+
+### 11.17 Phase 10 Milestone 10.6 Summary: Flutter Mobile: Push Token Lifecycle & In-App Notification Center
+- **Objective**: Implement the complete mobile push notification token lifecycle, foreground/background message handling, and in-app notification center in the Flutter mobile application (`apps/mobile`).
+- **Key Deliverables**:
+  1. **FCM Device-Token Lifecycle**:
+     - Configured Android (`POST_NOTIFICATIONS` permission in `AndroidManifest.xml`) and iOS (`UIBackgroundModes` `fetch` and `remote-notification` in `Info.plist`).
+     - Implemented `FirebasePushNotificationService` with top-level `@pragma('vm:entry-point') firebaseMessagingBackgroundHandler`, runtime permission request, and `onTokenRefresh` stream listener.
+     - Implemented `MockPushNotificationService` for deterministic unit testing and unconfigured environment fallback.
+     - Secure token registration via `POST /api/v1/notifications/devices` with device platform metadata (`ANDROID`/`IOS`, device model, OS version, app version).
+     - Token deduplication caching in `FlutterSecureStorage` (`getLastRegisteredPushToken`, `getLastRegisteredTokenHash`) avoiding redundant POST requests on cold app boots.
+     - Automatic token rotation re-registration with `force: true` on provider token refresh.
+     - Secure logout revocation: Dispatches `POST /api/v1/notifications/devices/revoke` (raw token) or `DELETE /api/v1/notifications/devices/{token_hash}` and deletes local cached tokens on session termination.
+  2. **In-App Notification Center (`NotificationInboxScreen`)**:
+     - Screen accessible via top app bar with real-time unread count badge.
+     - Unread vs read visual distinction with status dots and card styles.
+     - Filter chips ("All" vs "Unread") allowing quick filtering.
+     - Categorized badges (`Leave`, `Attendance`, `Security`, `Organization`, `Account`, `Notification`) with priority styling.
+     - Relative timestamps ("Just now", "5m ago", "2h ago", "Nov 22").
+     - Notification detail inspection modal (`NotificationDetailDialog`) showing full message content, event category, priority, formatted timestamp, and contextual action buttons.
+     - Pull-to-refresh (`RefreshIndicator`) and app-bar refresh icon button.
+     - Responsive loading (`LoadingIndicator`), error banner with retry (`ErrorBanner`), and empty state views (`EmptyStateView`).
+  3. **Documented Backend API Gap Handling**:
+     - Documented architectural gap: The backend currently lacks a user-scoped `GET /api/v1/notifications/inbox` endpoint and database-backed `is_read` read tracking for individual users.
+     - Preserved backend schema integrity without inventing fake database tables or pretend server synchronization:
+       - `NotificationRemoteDataSource` translates HTTP 404 into `ApiGapException`.
+       - `NotificationRepositoryImpl` maps this into `ApiGapFailure` without throwing unhandled exceptions.
+       - `NotificationInboxScreen` renders `NotificationApiGapBanner` while presenting in-memory push notifications received during the live session.
+  4. **Push Interactions & Safe Deep Link Whitelist**:
+     - Foreground push alerts (`onMessage`) are sanitized and added directly to the active session inbox.
+     - Safe deep link whitelist (`_isSafeRoute`): Restricts deep links strictly to validated internal application routes (`/home`, `/leave`, `/schedule`, `/history`, `/sync`, `/profile`) and explicitly rejects open-redirects or arbitrary external URLs (`https://...`).
+     - Sensitive data redaction: Passwords, auth tokens, invitation codes, and sensitive fraud telemetry (`risk_score`, `gps_spoof_score`) are regex-redacted before in-memory storage.
+  5. **Verification & Test Results**:
+     - 4 dedicated notification test suites in `apps/mobile/test/features/notifications/` (36 tests, 100% pass):
+       - `notification_remote_data_source_test.dart` (7 tests, 100% pass)
+       - `notification_repository_test.dart` (9 tests, 100% pass)
+       - `notification_bloc_test.dart` (12 tests, 100% pass)
+       - `notification_inbox_screen_test.dart` (8 tests, 100% pass)
+     - Full mobile test suite: **412 tests passing 100%** with zero regressions across attendance, auth, profile, leave, sync, devices, and history.
+     - Static checks: `flutter analyze` (0 issues found, clean); `dart format --set-exit-if-changed` (clean).
+     - Native builds: Android debug APK (`build/app/outputs/flutter-apk/app-debug.apk`) built successfully in 35.2s; Android release APK (`build/app/outputs/flutter-apk/app-release.apk`) built successfully in 56.9s.
+     - iOS APNs config verified; physical device delivery status: mock/simulated only (pending production FCM credentials and APNs certificates).
+- **Report**: [`docs/phase-reports/PHASE_10_MILESTONE_06_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_MILESTONE_06_REPORT.md)
+
+### 11.18 Phase 10 Milestone 10.7 Summary: End-to-End Simulation, Chaos Testing & Multi-Tenant Validation
+- **Objective**: Execute an exhaustive automated validation, failure-mode/chaos testing, and multi-tenant security verification across the Phase 10 notification subsystem and its cross-platform clients (FastAPI, Celery, Next.js web console, Flutter mobile app).
+- **Key Deliverables**:
+  1. **End-to-End Business Workflows**:
+     - Automated lifecycle simulations for Leave (`leave_request_submitted`, `approved`, `rejected`, `cancelled`), Attendance Conflicts (`submitted`, `approved`, `rejected`), Fraud Shield (`fraud_incident_high_risk`, `fraud_alert_digest`), Employee Invitations (`created`, `resent`), and Password Reset (`auth_password_reset_requested`).
+     - Accurate recipient resolution via tenant reporting hierarchy; strict enforcement of user quiet hours and channel preferences.
+     - Verification of secret protection: Passwords, auth tokens, invitation tokens, and sensitive fraud telemetry (`risk_score`, `gps_spoof_score`) are never logged or leaked into external payloads.
+  2. **Transaction and Outbox Chaos Engineering**:
+     - *Rollback Atomicity*: Business transaction rollbacks leave zero orphan notification records in outbox.
+     - *Broker Decoupling*: Celery enqueue failure / Redis unavailability preserves notifications in `PENDING` outbox status without crashing caller threads; outbox polling/sweeping recovers dispatch.
+     - *Worker Failure Recovery*: `reconcile_stuck_processing_task` reconciles stuck `PROCESSING` tasks past lock timeout (300s) to `RETRY_SCHEDULED` or `FAILED`.
+     - *Backoff & Exhaustion*: Transient provider failures trigger exponential backoff (60s -> 120s -> 240s) up to `max_attempts=3`, then transition to `FAILED`.
+     - *Concurrency Race Protection*: Atomic SQL claiming (`UPDATE ... WHERE status IN ('PENDING', 'RETRY_SCHEDULED') RETURNING ...`) guarantees single-worker execution.
+     - *Delivery Semantics*: External delivery is formally characterized as **at-least-once**, not exactly-once.
+  3. **Multi-Tenant Security & Isolation**:
+     - Verified Tenant A cannot inspect, modify, or receive Tenant B notifications, templates, device tokens, quiet hours, or preferences.
+     - Cross-tenant template isolation with global system template fallback (`is_system=True`, `tenant_id IS NULL`).
+     - RBAC enforcement: 401 Unauthorized for unauthenticated requests, 403 Forbidden for unauthorized roles.
+     - PostgreSQL Row-Level Security: Verified Alembic migration DDL enforces `FORCE ROW LEVEL SECURITY` and `tenant_isolation` policies with `current_setting('app.tenant_id', true)::uuid`.
+  4. **Cross-Platform Integration Simulation**:
+     - Simulated complete lifecycle: Backend Outbox -> Web Admin Console -> Mobile Token Registration -> Mock FCM Dispatch -> Foreground In-App Alert -> Deep Link Whitelisting -> Logout Token Revocation.
+     - Documented mobile inbox API gap: Confirmed that mobile app maps HTTP 404 to `ApiGapException` / `NotificationApiGapBanner` gracefully without inventing mock persistence.
+  5. **Provider Readiness & Delivery Taxonomy**:
+     - Verified taxonomy: Mock PUSH/EMAIL (`READY_FOR_USE`), SMS (`UNCONFIGURED_DEFERRED`), FCM/SMTP (`CONFIGURED_UNVERIFIED`).
+     - Verified delivery progression: `CREATED` -> `WORKER_ACCEPTED` -> `PROVIDER_ACCEPTED` (`SENT`) -> `DEVICE_DELIVERED` -> `USER_OPENED`.
+  6. **Automated Test Results & Performance Metrics**:
+     - Backend: `tests/test_phase10_milestone7_e2e_and_chaos.py` (24 tests, 100% pass in 2.54s).
+     - Full Phase 10 backend suite: **144 tests passing 100%** (20 DB, 37 engine, 19 FCM/Celery, 23 events, 21 web routes, 24 chaos/E2E).
+     - Full backend suite: **799 tests passing 100%** across 37 test files (in 107.46s).
+     - Web frontend: `apps/web/src/lib/notification-e2e-simulation.test.ts` (6 tests, 100% pass); total 125 web unit tests passing (100%).
+     - Mobile: 412 Flutter tests passing (100%); `flutter analyze` 0 issues; `dart format` clean.
+     - Monorepo grand total: **1,336 automated tests passing 100%**.
+     - Performance: 50 concurrent outbox writes in 12ms (>4,000/s); 50 dispatches in 5ms (>10,000/s); 10 worker recoveries in 2ms.
+- **Report**: [`docs/phase-reports/PHASE_10_MILESTONE_07_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_MILESTONE_07_REPORT.md)
+
+### 11.19 Phase 10 Milestone 10.8 Summary: Security Audit, Penetration Testing & Formal Phase 10 Closure
+- **Objective**: Execute a rigorous security audit, controlled automated penetration testing, remediation of discovered vulnerabilities, monorepo regression testing, and formal Phase 10 closure under Outcome B (Conditionally closed due to host environment boundaries).
+- **Key Deliverables & Security Remediations**:
+  1. **Finding 1 (High Severity) — RBAC Hardening on Administration Endpoints**:
+     - Secured `GET /notifications/overview`, `GET /notifications/templates`, `GET /notifications/preferences`, `GET /notifications/channels`, and `GET /notifications/activity` in `services/api/notifications/routes.py` with `dependencies=[Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR))]`. Previously, authenticated employees could view company-wide delivery statistics and activity logs containing sensitive leave details and fraud alerts.
+     - Added client-side role privilege guard in Next.js web console (`apps/web/src/app/notifications/page.tsx`), displaying an `Access Denied` card for non-admin/HR users.
+  2. **Finding 2 (Medium Severity) — Template SSTI Pre-Validation Gap**:
+     - Added `@field_validator("body_template", "subject_template")` in `TemplateCreateRequest` and `TemplateUpdateRequest` (`services/api/notifications/schemas.py`) utilizing `_SUSPICIOUS_EXPRESSION_REGEX`. Prohibited Jinja2/Python dunder expressions (`__class__`, `__mro__`, `__import__`, `eval(`, `exec(`, `os.`) are rejected with HTTP 422 Unprocessable Entity at API request parsing time before persisting to database.
+     - Enforced max length (50 characters) on `timezone` in `PreferenceUpdateRequest`.
+  3. **Finding 3 (Low Severity) — Device Token Boundary & Hash Length Enforcement**:
+     - Enforced maximum string length (`len(clean_hash) <= 128`) on `DELETE /notifications/devices/{token_hash}` and `len(raw_token) <= 4096` on `POST /notifications/devices/revoke` (`services/api/notifications/routes.py`), returning HTTP 400 Bad Request on oversized inputs.
+  4. **Finding 4 (Informational) — Upstream Next.js 14.2.5 Security Advisories**:
+     - `npm audit` flagged known upstream Next.js 14.2.5 image optimization / server actions advisories. Packages remain safely pinned per policy to prevent breaking monorepo stability; framework upgrade scheduled for deployment hardening.
+  5. **PostgreSQL RLS & Celery Background Execution**:
+     - Verified that Celery background workers in `services/workers/notification_tasks.py` explicitly invoke `await set_tenant_context(session, str(tenant_id))` before querying notifications or invoking dispatchers, ensuring fail-closed PostgreSQL Row-Level Security outside HTTP request threads.
+  6. **Automated Penetration Test Suites**:
+     - Backend: `tests/test_phase10_milestone8_security_audit.py` (34 test cases across Authentication, Cross-Tenant Isolation, RBAC Hardening, API/Input Attacks, and Notification Data Protection — 100% pass in 2.14s).
+     - Web: `apps/web/src/lib/notification-security-audit.test.ts` (7 penetration test cases covering RBAC 403, SSTI 422, token length 400, and credential masking — 100% pass).
+  7. **Monorepo Regression Matrix & Test Counts**:
+     - Backend: **833 tests passing 100%** (178 Phase 10 tests).
+     - Web Console: **132 tests passing 100%**; `npm run lint` clean (0 warnings/errors); `npm run build` clean (15/15 static pages prerendered).
+     - Mobile: **412 tests passing 100%**; `flutter analyze` clean (0 issues).
+     - Grand Total: **1,377 automated tests passing 100%** across the monorepo.
+  8. **Formal Closure Verdict**:
+     - **Outcome B — Conditionally Closed**: All automated suites and security tests pass with 100% success. Conditionally closed due to development workstation boundary (no live host PostgreSQL/Redis daemons and no physical Android/iOS hardware).
+- **Report**: [`docs/phase-reports/PHASE_10_MILESTONE_08_SECURITY_AUDIT_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_10_MILESTONE_08_SECURITY_AUDIT_REPORT.md)
+
+### 11.20 Phase 11 Milestone 11.1 Summary: Offline-First Sync Engine Architecture Assessment & Blueprint
+- **Objective**: Conduct a complete architecture assessment of the existing offline-first synchronization subsystem and produce a technically rigorous implementation blueprint for Phase 11.
+- **Key Deliverables**:
+  1. **Comprehensive Scope Assessment (`docs/PHASE_11_SCOPE_ASSESSMENT.md`)**:
+     - Audited all 19 technical dimensions across Flutter local queues, SQLite schemas, backend punch ledger, idempotency records, conflict submission APIs, and PostgreSQL Row-Level Security.
+     - Documented gaps: Lack of batch sync API (`POST /attendance/sync/batch`), single-item network chatriness, timestamp assignment placing offline punches at sync time rather than punch time, missing downward sync, and missing supervisor conflict adjudication on mobile.
+  2. **8-Milestone Implementation Plan (`docs/PHASE_11_PLAN.md`)**:
+     - Formulated 8 detailed milestones: 11.1 (Blueprint), 11.2 (Batch Ingestion & Timestamp Hardening), 11.3 (Downward Sync Protocol), 11.4 (Mobile SQLite Queue & Sync BLoC), 11.5 (Supervisor Mobile Conflict Resolution UI), 11.6 (Web Admin Sync Monitoring Console), 11.7 (End-to-End Simulation & Chaos), 11.8 (Security Audit & Closure).
+     - Reconciled roadmap sequence: Confirmed Phase 11 is specialized as **Offline-First Sync Engine & Advanced Conflict Resolution** while Plans & Billing is re-sequenced.
+- **Report**: [`docs/PHASE_11_SCOPE_ASSESSMENT.md`](file:///Users/apple/Upostit/docs/PHASE_11_SCOPE_ASSESSMENT.md) & [`docs/PHASE_11_PLAN.md`](file:///Users/apple/Upostit/docs/PHASE_11_PLAN.md)
+
+### 11.21 Phase 11 Milestone 11.2 Summary: Backend Batch Sync Protocol & Timestamp Semantic Hardening
+- **Objective**: Implement the backend batch synchronization protocol for queued offline attendance events with atomic savepoint isolation, dual-tier idempotency, and timestamp semantic hardening.
+- **Key Deliverables**:
+  1. **Batch Sync Endpoint (`POST /api/v1/attendance/sync/batch`)**:
+     - Accepts up to 50 items per batch (`AttendanceBatchSyncRequest`), returning aggregate counts and item receipts (`ACCEPTED`, `DUPLICATE`, `REQUIRES_REVIEW`, `REJECTED`, `CONFLICT`, `RETRYABLE`).
+     - Derives employee and tenant identity strictly from authenticated JWT (`AuthenticatedContext`). Cross-tenant requests rejected with HTTP 400.
+     - Role scoping strictly enforced: `OWNER`, `ADMIN`, `HR` tenant-wide; `MANAGER` scoped to self and verified direct reports (`Employee.reporting_manager_id == mgr_emp.id`, 403 Forbidden on non-direct reports); `EMPLOYEE` scoped to own attendance only (403 Forbidden on peers).
+     - Enforces row-level lock (`with_for_update()`) on Employee to serialize concurrent syncs.
+  2. **Partial Batch Success via Savepoint Isolation**:
+     - Executes each item inside nested transaction savepoints (`session.begin_nested()`). Policy violations or state conflicts roll back only that specific event while preceding and subsequent items proceed cleanly.
+  3. **Dual-Tier Idempotency**:
+     - Intra-batch deduplication: First occurrence processed; duplicate keys within same batch receive `DUPLICATE` receipt replaying original `server_event_id` and `effective_at`.
+     - Database-level deduplication: Checks `attendance_idempotency_records`. Completed punches replayed without inserting duplicate ledger rows into `attendance_events`.
+  4. **Timestamp Semantic Hardening & Warning Window Invariant**:
+     - Legitimate offline punches (`is_offline_sync=True`) within allowable windows assign `effective_at = device_reported_at`, anchoring to the historical shift date and calculating correct work duration.
+     - Preserves `server_received_at` in dedicated audit column for forensic analysis.
+     - Future timestamps within warning window (60s–300s) preserve original `device_reported_at` intact for auditability and supervisor adjudication, while assigning `effective_at = server_received_at` to prevent premature future working duration or shift distortion until reviewed, attaching `review_status = "PENDING_REVIEW"` (`FLAG_FUTURE_TIMESTAMP_DETECTED`) and `timestamp_verification_status = "SUSPICIOUS_CLOCK_DRIFT"`.
+     - Extended offline events (24h–72h) retain original event time with `PENDING_REVIEW` (`FLAG_OFFLINE_WINDOW_EXCEEDED`).
+     - Hard rejections with HTTP 422 for future > 300s (`FUTURE_TIMESTAMP`) and past > 72h (`OFFLINE_WINDOW_EXCEEDED`).
+     - Applied matching hardened timestamp semantics to `POST /attendance/punch` for backwards compatibility.
+  5. **State Machine & Invariant on Unclosed Breaks**:
+     - In-memory state tracking (`CHECKED_OUT`, `WORKING`, `ON_BREAK`) initialized from DB.
+     - Detects out-of-order punches and missing prerequisites (`SEQUENCE_CONFLICT`).
+     - **Strict Break-End Invariant**: Never fabricates a `BREAK_END` event or invents break-end timestamps. When checking out while on break, preserves original open break, marks check-out with `PENDING_REVIEW` (`UNCLOSED_BREAK_ON_CHECKOUT`), and returns `REQUIRES_REVIEW` receipt.
+  6. **Automated Verification Matrix**:
+     - Implemented all 20 required scenarios plus manager direct-report checks and warning window integration test in `tests/test_phase11_sync_batch_api.py` (25/25 passed 100%).
+     - Monorepo regression suites: Backend (858/858 passed), Web (132/132 passed), Mobile (412/412 passed). **1,402 total automated tests passing 100%**.
+  7. **Roadmap Discrepancy Note**:
+     - Preserves the historical roadmap discrepancy: Phase 11 was originally designated as Plans and Billing in initial plans, re-sequenced to prioritize the Offline-First Sync Engine & Advanced Conflict Resolution.
+- **Report**: [`docs/phase-reports/PHASE_11_MILESTONE_02_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_11_MILESTONE_02_REPORT.md)
+
+### 11.22 Phase 11 Milestone 11.3 Summary: Downward Delta Sync Protocol: Reference Data & Shift Rosters
+- **Objective**: Implement reliable server-to-mobile synchronization of reference data and shift rosters so the mobile client reflects updates made by HR/Admins without requiring logout or app reinstall.
+- **Key Deliverables Completed & Acceptance Hardened**:
+  1. **Pydantic v2 Delta Schemas (`services/api/attendance/downward_sync_schemas.py`)**:
+     - `SyncDeltaResponse`, `SyncEmployeePayload`, `SyncShiftPayload`, `SyncWorkplacePayload`, `SyncHolidayPayload`, `SyncLeaveTypePayload`, `SyncLeaveBalancePayload`, `SyncLeaveRequestPayload`, `SyncAttendancePolicyPayload`, `SyncDirectReportPayload`, `SyncReportingHierarchyPayload`, `SyncTombstonePayload`.
+  2. **Downward Delta Sync Engine & Acceptance Hardening (`services/api/attendance/downward_sync_service.py`)**:
+     - Composite keyset cursor pagination v2 (`v=2`, `tid`, `uid`, `eid`, `bts`, `sts`, `ent`, `lid`, `exp`, `sig`) progressing through `COLLECTION_ORDER`.
+     - Frozen session snapshot isolation (`session_ts`) preventing concurrent database inserts/updates from skewing multi-page sync sessions.
+     - Identical timestamp preservation without skips or duplicates across page boundaries.
+     - HMAC-SHA256 tamper-resistant signatures, cursor TTL expiration enforcement, tenant/user/employee context binding, and zero-downtime key rotation via `fallback_keys`.
+     - Full sync fallback when `cursor=None`.
+     - Deactivation semantics (inactive employee returns empty reference collections).
+     - Workplace unassignment tombstones (`entity_type="workplace"`) delivered across page boundaries.
+  3. **Backend API Endpoints (`services/api/attendance/sync_routes.py` & `routes.py`)**:
+     - Registered `GET /api/v1/sync/delta` and compatibility alias `GET /api/v1/attendance/sync/delta` under `Permission.VIEW_OWN_PROFILE`.
+  4. **Mobile SQLite Schema Upgrade to v2 (`local_queue_database.dart`)**:
+     - Bumped `databaseVersion` to 2; created 10 versioned cache tables in `_onUpgrade` (`sync_state`, `cached_employee`, `cached_shifts`, `cached_workplaces`, `cached_holidays`, `cached_leave_types`, `cached_leave_balances`, `cached_leave_requests`, `cached_attendance_policy`, `cached_direct_reports`).
+     - **Queue Preservation Invariant**: Pending punches in `local_attendance_queue` are never dropped, modified, or cleared across migrations or cache purges.
+  5. **Mobile Downward Sync DAO (`downward_sync_dao.dart`)**:
+     - Atomic transactional delta application (`applyDeltaTransactionally`). Rollback on failure prevents cursor skew or partial cache corruption.
+     - Duplicate response idempotency via `ConflictAlgorithm.replace`.
+     - Tombstone deletions and dedicated offline reading queries.
+  6. **Mobile Sync Coordinator (`downward_sync_coordinator.dart`)**:
+     - Concurrency mutex deduplicating overlapping calls via `Completer`.
+     - Multi-page pagination loop; self-healing cursor reset on HTTP 400 rejection (purging reference cache while strictly preserving `local_attendance_queue`); offline detection.
+  7. **Automated Verification Matrix**:
+     - 21 Pytest backend integration and acceptance audit tests in `tests/test_phase11_downward_sync_api.py` (21/21 passed 100%).
+     - 15 Flutter unit and acceptance audit tests in `apps/mobile/test/features/sync/` (15/15 passed 100%).
+     - Monorepo regression suites: Backend (879/879 passed), Web (132/132 passed), Mobile (427/427 passed). **1,438 total automated tests passing 100%**. 0 Ruff issues, 0 Flutter analyzer issues.
+- **Report**: [`docs/phase-reports/PHASE_11_MILESTONE_03_REPORT.md`](file:///Users/apple/Upostit/docs/phase-reports/PHASE_11_MILESTONE_03_REPORT.md)
+
 ## 12. Next Actions
 
-1. **Current State**: Phase 6, Phase 7, Phase 8 (Milestones 8.1–8.7), and **Phase 9 (Milestones 9.1 through 9.8) are COMPLETED, AUDITED, AND FORMALLY CLOSED** on branch `phase-06` (655 backend tests, 376 Flutter tests, and 104 web unit tests passing, **1,135 total automated tests passing 100%**).
-2. **Phase 9 Closure Outcome**: **Outcome B: Implementation complete, infrastructure validation outstanding** (pending live PostgreSQL/Supabase staging for RLS policy engine verification).
-3. **Phase 9 Milestone Implementation Roadmap (100% Complete)**:
-   - [x] **Milestone 9.1 — Database Architecture, Models & Alembic Migration**: `leave_types`, `leave_balances`, `leave_requests`, `holiday_calendars`, `holidays`, `overtime_rules`, `overtime_records` tables, composite foreign keys, RLS policies, and indexes. (COMPLETED)
-   - [x] **Milestone 9.2 — Holiday Calendars & Leave Type Configuration**: Hierarchical holiday resolution (Location $\to$ Department $\to$ Tenant Default), leave types CRUD, and employee holiday queries. (COMPLETED)
-   - [x] **Milestone 9.3 — Leave Application, Balance Tracking & Supervisor Adjudication**: Employee leave submission, balance reservation/lock, manager direct-report approval queue, anti-self-approval rule, and balance rollback on cancellation. (COMPLETED)
-   - [x] **Milestone 9.4 — Overtime Rules Engine & Attendance Calculation Integration**: Pure calculation engine updates for `ON_LEAVE`, `HOLIDAY`, and overtime multipliers ($1.5\times$, $2.0\times$); automated daily projection recalculation. (COMPLETED)
-   - [x] **Milestone 9.5 — Next.js Web Console: Leave & Overtime Administration**: HR policy configuration, supervisor leave review queues, team holiday calendars, and overtime adjudication. (COMPLETED)
-   - [x] **Milestone 9.6 — Flutter Mobile: Leave Application, Balances & Holiday Hub**: Balance display cards, date picker application flow, leave history, holiday calendar screens, and supervisor review queue. (COMPLETED)
-   - [x] **Milestone 9.7 — End-to-End Cross-Platform Simulation & Concurrency Testing**: Full leave application lifecycle, holiday work punch with overtime, race condition fuzzing, and chaos simulation. (COMPLETED)
-   - [x] **Milestone 9.8 — Security Audit, Penetration Testing & Phase 9 Completion**: Comprehensive audit, anti-self-approval identity remediation, 14 penetration tests, and formal Phase 9 closure (Outcome B). (COMPLETED)
-4. **Next Phase (Phase 10 — Payroll Integration & Time Card Exports)**:
-   - Do NOT begin Phase 10 without explicit authorization.
+1. **Current State**: Phase 11 Milestone 11.3 (Downward Delta Sync Protocol: Reference Data & Shift Rosters) is **ACCEPTED, COMPLETED & OPERATIONALLY HARDENED** on branch `phase-06` (879 backend tests [21 Phase 11.3], 427 Flutter tests [15 Phase 11.3], and 132 web tests passing, **1,438 total automated tests passing 100%** across the monorepo; 0 Ruff issues, 0 Flutter analyzer issues).
+2. **Current Alembic Head**: `b5c6d7e8f9a0` (no backend database schema changes required for Phase 11.3; existing schema reused; mobile SQLite database upgraded to version 2).
+3. **Phase 11 Milestone Implementation Status (Approved 8-Milestone Sequence)**:
+   - [x] **Milestone 11.1 — Offline-First Architecture Assessment, Gap Analysis & Implementation Blueprint**: Comprehensive scope audit, 19 technical dimensions analyzed, 8-milestone plan authored. (COMPLETED)
+   - [x] **Milestone 11.2 — Backend Batch Sync Protocol & Timestamp Semantic Hardening**: `POST /attendance/sync/batch`, savepoint isolation, dual-tier idempotency, timestamp semantic hardening, zero synthetic break-end events, manager direct-report scoping, all 20 required scenarios verified, 25 tests. (COMPLETED & VERIFIED)
+   - [x] **Milestone 11.3 — Downward Delta Sync Protocol (Reference Data & Shift Rosters)**: Server change tracking, composite keyset pagination v2, frozen session snapshot isolation, HMAC-SHA256 cursor security with fallback keys, 7 domain entities, mobile SQLite v2 schema upgrade with queue preservation invariant, atomic transactional application, coordinator mutex and self-healing. (ACCEPTED & AUDITED)
+   - [ ] **Milestone 11.4 — Flutter Mobile: Enhanced SQLite Offline Queue & Resilient Sync BLoC**: Dynamic batching, exponential backoff, retry management, local conflict resolution. (AWAITING AUTHORIZATION)
+   - [ ] **Milestone 11.5 — Flutter Mobile: Supervisor Conflict Adjudication & Offline Queue Management**: Mobile offline attendance incident manager UI, peer queue inspection. (PLANNED)
+   - [ ] **Milestone 11.6 — Next.js Web Console: Sync Engine Monitoring & Conflict Administration**: Fleet device sync telemetry, batch inspection, and audit console. (PLANNED)
+   - [ ] **Milestone 11.7 — End-to-End Simulation, Multi-Device Chaos Testing & Offline Ledger Integrity**: Chaos testing, battery dropouts, concurrent sync races, ledger integrity audits. (PLANNED)
+   - [ ] **Milestone 11.8 — Security Audit, Penetration Testing & Formal Phase 11 Closure**: Security hardening, tamper resistance, replay attack testing, formal closure under Outcome B. (PLANNED)
+4. **Execution Rules**:
+   - Do NOT begin Milestone 11.4 without explicit user authorization.
    - Do NOT commit, tag, or push to git.
    - Preserve all existing user changes.
+
 
 

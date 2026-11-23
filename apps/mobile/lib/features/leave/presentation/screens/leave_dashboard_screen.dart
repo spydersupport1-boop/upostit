@@ -158,7 +158,8 @@ class _LeaveDashboardScreenState extends State<LeaveDashboardScreen> {
                         const SizedBox(width: AppSpacing.sm),
                         OutlinedButton.icon(
                           onPressed: () => context.push('/leave/approvals'),
-                          icon: const Icon(Icons.assignment_turned_in, size: 18),
+                          icon:
+                              const Icon(Icons.assignment_turned_in, size: 18),
                           label: const Text('Approvals'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.primary,

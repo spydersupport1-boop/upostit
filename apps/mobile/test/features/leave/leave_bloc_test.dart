@@ -189,7 +189,8 @@ void main() {
               halfDayPeriod: null,
               reason: 'Vacation',
             )).thenAnswer((_) async => const Result.failure(
-              ServerFailure('Insufficient leave balance for requested duration'),
+              ServerFailure(
+                  'Insufficient leave balance for requested duration'),
             ));
         return LeaveBloc(repository: mockRepository);
       },

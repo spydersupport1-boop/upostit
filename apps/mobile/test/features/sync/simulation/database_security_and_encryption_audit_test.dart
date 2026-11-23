@@ -212,10 +212,10 @@ void main() {
       );
       final rawDb = await db.open();
 
-      // Check PRAGMA user_version is 1
+      // Check PRAGMA user_version matches databaseVersion
       final versionResult = await rawDb.rawQuery('PRAGMA user_version;');
       final userVersion = versionResult.first.values.first as int;
-      expect(userVersion, equals(1));
+      expect(userVersion, equals(LocalQueueDatabase.databaseVersion));
 
       // Check metadata engine verification
       final meta = await rawDb.query(

@@ -2001,3 +2001,189 @@ export const overtimeApi = {
     }),
 };
 
+// =============================================================================
+// Phase 10: Notification Administration DTOs & Endpoints (Milestone 10.5)
+// =============================================================================
+
+export interface NotificationDto {
+  id: string;
+  tenant_id: string;
+  recipient_user_id?: string | null;
+  recipient_employee_id?: string | null;
+  event_type: string;
+  channel: string;
+  template_key?: string | null;
+  recipient_destination: string;
+  subject?: string | null;
+  body: string;
+  payload_json?: Record<string, unknown> | null;
+  status: string;
+  priority: string;
+  scheduled_for: string;
+  attempt_count: number;
+  max_attempts: number;
+  next_retry_at?: string | null;
+  provider_name?: string | null;
+  provider_message_id?: string | null;
+  error_message?: string | null;
+  idempotency_key?: string | null;
+  related_entity_type?: string | null;
+  related_entity_id?: string | null;
+  sent_at?: string | null;
+  delivered_at?: string | null;
+  failed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationOverviewDto {
+  total_count: number;
+  status_counts: Record<string, number>;
+  channel_counts: Record<string, number>;
+  recent_notifications: NotificationDto[];
+  delivery_distinction_note: string;
+}
+
+export interface NotificationTemplateDto {
+  id: string;
+  tenant_id?: string | null;
+  template_key: string;
+  name: string;
+  description?: string | null;
+  event_type: string;
+  channel: string;
+  subject_template?: string | null;
+  body_template: string;
+  locale: string;
+  is_active: boolean;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TemplateCreateRequestDto {
+  template_key: string;
+  name: string;
+  description?: string | null;
+  event_type: string;
+  channel: "PUSH" | "EMAIL" | "SMS";
+  subject_template?: string | null;
+  body_template: string;
+  locale?: string;
+  is_active?: boolean;
+}
+
+export interface TemplateUpdateRequestDto {
+  name?: string;
+  description?: string | null;
+  subject_template?: string | null;
+  body_template?: string;
+  is_active?: boolean;
+}
+
+export interface NotificationPreferenceDto {
+  id: string;
+  tenant_id: string;
+  user_id?: string | null;
+  is_push_enabled: boolean;
+  is_email_enabled: boolean;
+  is_sms_enabled: boolean;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  timezone: string;
+  category_preferences?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PreferenceUpdateRequestDto {
+  is_push_enabled?: boolean;
+  is_email_enabled?: boolean;
+  is_sms_enabled?: boolean;
+  quiet_hours_enabled?: boolean;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  timezone?: string;
+  category_preferences?: Record<string, unknown> | null;
+}
+
+export interface ChannelConfigItemDto {
+  channel: "PUSH" | "EMAIL" | "SMS";
+  is_enabled: boolean;
+  provider_name: string;
+  status: "CONFIGURED_UNVERIFIED" | "MOCK" | "UNCONFIGURED";
+  description: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ChannelListResponseDto {
+  channels: ChannelConfigItemDto[];
+}
+
+export interface NotificationActivityListDto {
+  items: NotificationDto[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export const notificationApi = {
+  getOverview: (token?: string) =>
+    apiFetch<NotificationOverviewDto>("/notifications/overview", {
+      token,
+    }),
+
+  getTemplates: (token?: string) =>
+    apiFetch<NotificationTemplateDto[]>("/notifications/templates", {
+      token,
+    }),
+
+  createOrUpdateTemplate: (data: TemplateCreateRequestDto, token?: string) =>
+    apiFetch<NotificationTemplateDto>("/notifications/templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  updateTemplate: (templateId: string, data: TemplateUpdateRequestDto, token?: string) =>
+    apiFetch<NotificationTemplateDto>(`/notifications/templates/${templateId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getPreferences: (token?: string) =>
+    apiFetch<NotificationPreferenceDto>("/notifications/preferences", {
+      token,
+    }),
+
+  updatePreferences: (data: PreferenceUpdateRequestDto, token?: string) =>
+    apiFetch<NotificationPreferenceDto>("/notifications/preferences", {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getChannels: (token?: string) =>
+    apiFetch<ChannelListResponseDto>("/notifications/channels", {
+      token,
+    }),
+
+  getActivity: (
+    params?: {
+      status?: string;
+      channel?: string;
+      event_type?: string;
+      limit?: number;
+      offset?: number;
+    },
+    token?: string
+  ) =>
+    apiFetch<NotificationActivityListDto>("/notifications/activity", {
+      token,
+      params,
+    }),
+};
+
+

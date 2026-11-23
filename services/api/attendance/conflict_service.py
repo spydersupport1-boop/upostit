@@ -9,6 +9,7 @@ Handles:
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import UTC, date, datetime, time
 from typing import Any
@@ -37,6 +38,8 @@ from services.api.attendance.schemas import (
 from services.api.employees.models import Employee
 from services.api.locations.models import Location
 from services.api.organization.models import Department
+
+logger = logging.getLogger(__name__)
 
 
 def compute_conflict_bundle_fingerprint(
@@ -224,6 +227,29 @@ async def submit_offline_conflict_bundle(
 
     res = OfflineConflictIncidentResponse.model_validate(new_incident)
     res.idempotent_replay = False
+
+    # Emit Phase 10 OfflineConflictSubmittedEvent (non-blocking)
+    try:
+        from services.api.notifications import OfflineConflictSubmittedEvent, dispatch_domain_event
+
+        emp_name = f"{user_emp.first_name} {user_emp.last_name}".strip() if user_emp else "Employee"
+        await dispatch_domain_event(
+            session=session,
+            event=OfflineConflictSubmittedEvent(
+                tenant_id=tenant_id,
+                incident_id=new_incident.id,
+                employee_id=target_employee_id,
+                employee_name=emp_name,
+                bundle_id=new_incident.bundle_id,
+                conflict_count=new_incident.total_events_count,
+                reason=new_incident.employee_notes or new_incident.rejection_summary,
+                assigned_reviewer_id=new_incident.assigned_reviewer_id,
+                actor_user_id=user_id,
+            ),
+        )
+    except Exception as exc:
+        logger.warning("Failed to dispatch offline conflict submitted notification: %s", exc)
+
     return res
 
 
@@ -771,6 +797,33 @@ async def adjudicate_conflict_incident(
             incident.resolved_correction_event_ids = []
             await session.flush()
 
+            # Emit Phase 10 AttendanceConflictRejectedEvent (non-blocking)
+            try:
+                from services.api.notifications import (
+                    AttendanceConflictRejectedEvent,
+                    dispatch_domain_event,
+                )
+
+                emp_name = (
+                    f"{target_emp.first_name} {target_emp.last_name}".strip()
+                    if target_emp
+                    else "Employee"
+                )
+                await dispatch_domain_event(
+                    session=session,
+                    event=AttendanceConflictRejectedEvent(
+                        tenant_id=tenant_id,
+                        incident_id=incident.id,
+                        employee_id=incident.employee_id,
+                        employee_name=emp_name,
+                        reviewer_user_id=reviewer_user_id,
+                        rejection_reason=incident.decision_reason,
+                        actor_user_id=reviewer_user_id,
+                    ),
+                )
+            except Exception as exc:
+                logger.warning("Failed to dispatch conflict rejected notification: %s", exc)
+
             return AttendanceConflictDecisionResponse(
                 id=incident.id,
                 tenant_id=incident.tenant_id,
@@ -890,6 +943,33 @@ async def adjudicate_conflict_incident(
             meta["override_location_id"] = str(payload.override_location_id)
             incident.metadata_json = meta
         await session.flush()
+
+        # Emit Phase 10 AttendanceConflictApprovedEvent (non-blocking)
+        try:
+            from services.api.notifications import (
+                AttendanceConflictApprovedEvent,
+                dispatch_domain_event,
+            )
+
+            emp_name = (
+                f"{target_emp.first_name} {target_emp.last_name}".strip()
+                if target_emp
+                else "Employee"
+            )
+            await dispatch_domain_event(
+                session=session,
+                event=AttendanceConflictApprovedEvent(
+                    tenant_id=tenant_id,
+                    incident_id=incident.id,
+                    employee_id=incident.employee_id,
+                    employee_name=emp_name,
+                    reviewer_user_id=reviewer_user_id,
+                    adjudication_comment=incident.decision_reason,
+                    actor_user_id=reviewer_user_id,
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Failed to dispatch conflict approved notification: %s", exc)
 
         return AttendanceConflictDecisionResponse(
             id=incident.id,
