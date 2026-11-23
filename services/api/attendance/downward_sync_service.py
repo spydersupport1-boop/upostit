@@ -362,7 +362,7 @@ async def process_downward_delta_sync(
 
     # If employee is deactivated/terminated, return deactivated profile and empty deltas
     if employee.status != "active":
-        emp_payload = SyncEmployeePayload.model_validate(employee)
+        deactivated_emp_payload = SyncEmployeePayload.model_validate(employee)
         next_cursor = generate_sync_cursor(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -377,7 +377,7 @@ async def process_downward_delta_sync(
             server_time=server_time,
             next_cursor=next_cursor,
             has_more=False,
-            employee=emp_payload,
+            employee=deactivated_emp_payload,
             shifts=[],
             workplaces=[],
             holidays=[],

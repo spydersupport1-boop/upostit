@@ -65,12 +65,14 @@ def compute_sync_item_fingerprint(
         "event_type": item.event_type,
         "device_reported_at": item.device_reported_at.astimezone(UTC).isoformat(),
         "location_id": str(item.location_id) if item.location_id else None,
-        "latitude": round(item.latitude, 6) if item.latitude is not None else None,
-        "longitude": round(item.longitude, 6) if item.longitude is not None else None,
+        "latitude": round(float(item.latitude), 6) if item.latitude is not None else None,
+        "longitude": round(float(item.longitude), 6) if item.longitude is not None else None,
         "wifi_bssid": item.wifi_bssid.upper() if item.wifi_bssid else None,
         "device_id": item.device_id.strip() if item.device_id else None,
     }
-    encoded = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        canonical_dict, sort_keys=True, separators=(",", ":"), default=str
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 

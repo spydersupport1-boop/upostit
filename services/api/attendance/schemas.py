@@ -1348,22 +1348,22 @@ class BatchSyncPunchItem(BaseModel):
         default=None,
         description="Workplace location UUID if geofenced",
     )
-    latitude: float | None = Field(
+    latitude: Decimal | None = Field(
         default=None,
-        ge=-90.0,
-        le=90.0,
+        ge=-90,
+        le=90,
         description="WGS84 latitude",
     )
-    longitude: float | None = Field(
+    longitude: Decimal | None = Field(
         default=None,
-        ge=-180.0,
-        le=180.0,
+        ge=-180,
+        le=180,
         description="WGS84 longitude",
     )
-    accuracy_meters: float | None = Field(
+    accuracy_meters: Decimal | None = Field(
         default=None,
-        ge=0.0,
-        le=50000.0,
+        ge=0,
+        le=50000,
         description="Horizontal GPS accuracy in meters",
     )
     wifi_bssid: str | None = Field(
@@ -1376,9 +1376,11 @@ class BatchSyncPunchItem(BaseModel):
         max_length=64,
         description="Connected access point SSID",
     )
-    wifi_signal_status: str = Field(
+    wifi_signal_status: Literal[
+        "AVAILABLE", "UNAVAILABLE", "UNSUPPORTED", "PERMISSION_DENIED"
+    ] = Field(
         default="AVAILABLE",
-        max_length=32,
+        description="Device Wi-Fi telemetry capability status",
     )
     device_id: str | None = Field(
         default=None,
