@@ -226,8 +226,7 @@ void main() {
       expect(find.text('Christmas Day'), findsOneWidget);
     });
 
-    testWidgets('ApplyLeaveScreen validates reason input',
-        (tester) async {
+    testWidgets('ApplyLeaveScreen validates reason input', (tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -255,7 +254,8 @@ void main() {
       expect(find.text('Reason is required'), findsOneWidget);
     });
 
-    testWidgets('HolidayHubScreen renders upcoming holidays and resolution info',
+    testWidgets(
+        'HolidayHubScreen renders upcoming holidays and resolution info',
         (tester) async {
       when(() => mockLeaveBloc.state).thenReturn(
         const LeaveState(
@@ -326,7 +326,8 @@ void main() {
 
       // Self-submitted request has Anti-Self-Approval notice and NO Approve/Reject buttons
       expect(
-        find.textContaining('Anti-Self-Approval: You cannot approve or reject your own leave request.'),
+        find.textContaining(
+            'Anti-Self-Approval: You cannot approve or reject your own leave request.'),
         findsOneWidget,
       );
     });

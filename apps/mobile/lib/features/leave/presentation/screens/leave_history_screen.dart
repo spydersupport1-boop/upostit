@@ -202,4 +202,3 @@ class _LeaveHistoryScreenState extends State<LeaveHistoryScreen> {
     );
   }
 }
-

@@ -24,9 +24,8 @@ class BalanceCard extends StatelessWidget {
     final used = balance.used;
     final pending = balance.pendingApproval;
 
-    final progress = totalAllocated > 0
-        ? (used / totalAllocated).clamp(0.0, 1.0)
-        : 0.0;
+    final progress =
+        totalAllocated > 0 ? (used / totalAllocated).clamp(0.0, 1.0) : 0.0;
 
     return Container(
       width: 260,

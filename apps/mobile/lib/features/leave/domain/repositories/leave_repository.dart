@@ -32,4 +32,3 @@ abstract class LeaveRepository {
   });
   Future<Result<List<UpcomingHoliday>>> getUpcomingHolidays({int limit = 15});
 }
-

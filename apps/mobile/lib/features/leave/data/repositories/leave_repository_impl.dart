@@ -102,9 +102,11 @@ class LeaveRepositoryImpl implements LeaveRepository {
   }
 
   @override
-  Future<Result<LeaveRequest>> cancelLeaveRequest(String id, {String? reason}) async {
+  Future<Result<LeaveRequest>> cancelLeaveRequest(String id,
+      {String? reason}) async {
     try {
-      final request = await remoteDataSource.cancelLeaveRequest(id, reason: reason);
+      final request =
+          await remoteDataSource.cancelLeaveRequest(id, reason: reason);
       return Result.success(request);
     } catch (e) {
       return Result.failure(_mapExceptionToFailure(e));
@@ -146,7 +148,8 @@ class LeaveRepositoryImpl implements LeaveRepository {
   }
 
   @override
-  Future<Result<List<UpcomingHoliday>>> getUpcomingHolidays({int limit = 15}) async {
+  Future<Result<List<UpcomingHoliday>>> getUpcomingHolidays(
+      {int limit = 15}) async {
     try {
       final holidays = await remoteDataSource.getUpcomingHolidays(limit: limit);
       return Result.success(holidays);
@@ -155,4 +158,3 @@ class LeaveRepositoryImpl implements LeaveRepository {
     }
   }
 }
-

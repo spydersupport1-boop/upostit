@@ -100,4 +100,3 @@ class SupervisorDecisionSubmitted extends LeaveEvent {
 class LeaveNoticesCleared extends LeaveEvent {
   const LeaveNoticesCleared();
 }
-

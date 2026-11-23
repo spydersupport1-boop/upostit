@@ -8,9 +8,19 @@ import 'database_key_provider.dart';
 /// if encryption initialization, key retrieval, or metadata verification fails.
 class LocalQueueDatabase {
   static const String databaseName = 'upostit_offline_queue.db';
-  static const int databaseVersion = 1;
+  static const int databaseVersion = 2;
   static const String metadataTable = 'local_storage_metadata';
   static const String queueTable = 'local_attendance_queue';
+  static const String syncStateTable = 'sync_state';
+  static const String cachedEmployeeTable = 'cached_employee';
+  static const String cachedShiftsTable = 'cached_shifts';
+  static const String cachedWorkplacesTable = 'cached_workplaces';
+  static const String cachedHolidaysTable = 'cached_holidays';
+  static const String cachedLeaveTypesTable = 'cached_leave_types';
+  static const String cachedLeaveBalancesTable = 'cached_leave_balances';
+  static const String cachedLeaveRequestsTable = 'cached_leave_requests';
+  static const String cachedAttendancePolicyTable = 'cached_attendance_policy';
+  static const String cachedDirectReportsTable = 'cached_direct_reports';
   static const String expectedEngine = 'SQLCIPHER_PAGE_AES256';
 
   final DatabaseKeyProvider _keyProvider;
@@ -234,10 +244,192 @@ class LocalQueueDatabase {
       CREATE INDEX idx_local_queue_created 
       ON $queueTable(tenant_id, user_id, created_at DESC);
     ''');
+
+    // 5. Create downward sync reference data cache tables
+    await _createDownwardSyncTables(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Migration logic for future versions
+    if (oldVersion < 2) {
+      // Version 2: Add downward delta sync reference data cache tables without altering queue
+      await _createDownwardSyncTables(db);
+      await db.insert(
+        metadataTable,
+        {
+          'key': 'schema_version',
+          'value': newVersion.toString(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+  }
+
+  Future<void> _createDownwardSyncTables(Database db) async {
+    // 1. Sync State (Cursor and sync metadata)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $syncStateTable (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 2. Cached Employee Profile
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedEmployeeTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        work_email TEXT NOT NULL,
+        phone_number TEXT,
+        department_id TEXT,
+        designation_id TEXT,
+        reporting_manager_id TEXT,
+        employment_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        work_location TEXT,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 3. Cached Shifts
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedShiftsTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        shift_template_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        code TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        grace_period_minutes INTEGER NOT NULL,
+        early_exit_grace_minutes INTEGER NOT NULL,
+        half_day_threshold_minutes INTEGER NOT NULL,
+        full_day_threshold_minutes INTEGER NOT NULL,
+        break_duration_minutes INTEGER NOT NULL,
+        is_overnight INTEGER NOT NULL,
+        is_flexible INTEGER NOT NULL,
+        weekly_off_days TEXT NOT NULL,
+        effective_from TEXT NOT NULL,
+        effective_to TEXT,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 4. Cached Workplaces & Geofences
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedWorkplacesTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        code TEXT NOT NULL,
+        address_line1 TEXT NOT NULL,
+        city TEXT NOT NULL,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        radius_meters INTEGER NOT NULL,
+        timezone TEXT NOT NULL,
+        wifi_bssids TEXT NOT NULL,
+        is_active INTEGER NOT NULL,
+        is_assigned INTEGER NOT NULL,
+        is_primary INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 5. Cached Holidays
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedHolidaysTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        calendar_id TEXT NOT NULL,
+        holiday_date TEXT NOT NULL,
+        name TEXT NOT NULL,
+        holiday_type TEXT NOT NULL,
+        is_optional INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 6. Cached Leave Types
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedLeaveTypesTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        is_paid INTEGER NOT NULL,
+        allow_half_day INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 7. Cached Leave Balances
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedLeaveBalancesTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        leave_type_id TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        annual_allocation REAL NOT NULL,
+        used REAL NOT NULL,
+        available_balance REAL NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 8. Cached Leave Requests
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedLeaveRequestsTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        leave_type_id TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        is_half_day INTEGER NOT NULL,
+        total_days REAL NOT NULL,
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL,
+        decided_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 9. Cached Attendance Policy
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedAttendancePolicyTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        is_active INTEGER NOT NULL,
+        default_mode TEXT NOT NULL,
+        allowed_methods TEXT NOT NULL,
+        required_methods TEXT NOT NULL,
+        combination_rule TEXT NOT NULL,
+        gps_config TEXT NOT NULL,
+        wifi_config TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    // 10. Cached Direct Reports
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $cachedDirectReportsTable (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        work_email TEXT NOT NULL,
+        department_name TEXT,
+        status TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
   }
 
   Future<void> close() async {

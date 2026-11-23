@@ -12,6 +12,8 @@ import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
 import '../../../devices/presentation/widgets/device_status_card.dart';
+import '../../../notifications/presentation/bloc/notification_bloc.dart';
+import '../../../notifications/presentation/bloc/notification_event.dart';
 import '../../../sync/domain/repositories/local_queue_dao.dart';
 import '../../../sync/presentation/widgets/logout_warning_dialog.dart';
 import '../bloc/profile_bloc.dart';
@@ -67,6 +69,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (dialogCtx) => LogoutWarningDialog(
           unresolvedCount: unresolvedCount,
           onConfirmLogout: () {
+            try {
+              context
+                  .read<NotificationBloc>()
+                  .add(const RevokeDeviceTokenRequested());
+              context
+                  .read<NotificationBloc>()
+                  .add(const ClearNotificationSession());
+            } catch (_) {}
             context.read<AuthBloc>().add(const LogoutRequested());
           },
         ),
@@ -101,6 +111,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               onPressed: () {
                 Navigator.pop(dialogCtx);
+                try {
+                  context
+                      .read<NotificationBloc>()
+                      .add(const RevokeDeviceTokenRequested());
+                  context
+                      .read<NotificationBloc>()
+                      .add(const ClearNotificationSession());
+                } catch (_) {}
                 context.read<AuthBloc>().add(const LogoutRequested());
               },
               child: const Text('Sign Out'),
@@ -167,6 +185,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _buildUserCard(userProfile, profileState),
                           const SizedBox(height: 16),
                           const DeviceStatusCard(),
+                          const SizedBox(height: 16),
+                          _buildNotificationCenterTile(context),
                           const SizedBox(height: 16),
                           _buildSyncQueueTile(context),
                           const SizedBox(height: 32),
@@ -385,6 +405,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildNotificationCenterTile(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.mdBorderRadius,
+        side: const BorderSide(color: AppColors.border),
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight,
+            borderRadius: AppRadius.smBorderRadius,
+          ),
+          child: const Icon(Icons.notifications_outlined,
+              color: AppColors.primary),
+        ),
+        title: Text(
+          'Notification Center',
+          style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          'View push alerts and workforce communications',
+          style: AppTypography.bodySmall,
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded,
+            color: AppColors.textSecondary),
+        onTap: () => context.push('/notifications'),
+      ),
     );
   }
 

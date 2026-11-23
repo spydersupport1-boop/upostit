@@ -9,6 +9,8 @@ import '../../../../shared/widgets/error_banner.dart';
 import '../../../../shared/widgets/loading_indicator.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
+import '../../../notifications/presentation/bloc/notification_bloc.dart';
+import '../../../notifications/presentation/bloc/notification_state.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
 import '../../../profile/presentation/bloc/profile_state.dart';
 import '../../../sync/presentation/widgets/offline_status_banner.dart';
@@ -441,6 +443,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen>
       title: const Text('Attendance'),
       centerTitle: false,
       actions: [
+        const _NotificationAppBarButton(),
         IconButton(
           key: const Key('sync_status_app_bar_button'),
           icon: const Icon(Icons.cloud_sync_outlined),
@@ -596,3 +599,47 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen>
     );
   }
 }
+
+class _NotificationAppBarButton extends StatelessWidget {
+  const _NotificationAppBarButton();
+
+  @override
+  Widget build(BuildContext context) {
+    NotificationBloc? bloc;
+    try {
+      bloc = BlocProvider.of<NotificationBloc>(context, listen: false);
+    } catch (_) {
+      bloc = null;
+    }
+
+    if (bloc == null) {
+      return IconButton(
+        key: const Key('notifications_app_bar_button'),
+        icon: const Icon(Icons.notifications_outlined),
+        tooltip: 'Notifications',
+        onPressed: () => context.push('/notifications'),
+      );
+    }
+
+    return BlocBuilder<NotificationBloc, NotificationState>(
+      bloc: bloc,
+      builder: (context, state) {
+        final unreadCount = state is NotificationLoaded ? state.unreadCount : 0;
+        return IconButton(
+          key: const Key('notifications_app_bar_button'),
+          icon: Badge(
+            isLabelVisible: unreadCount > 0,
+            label: Text(
+              unreadCount > 99 ? '99+' : unreadCount.toString(),
+              style: const TextStyle(fontSize: 10),
+            ),
+            child: const Icon(Icons.notifications_outlined),
+          ),
+          tooltip: 'Notifications',
+          onPressed: () => context.push('/notifications'),
+        );
+      },
+    );
+  }
+}
+

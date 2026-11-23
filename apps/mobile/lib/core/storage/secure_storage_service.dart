@@ -14,6 +14,14 @@ abstract class SecureStorageService {
   Future<String?> getSavedEmail();
   Future<void> saveEmail(String email);
 
+  Future<String?> getLastRegisteredPushToken();
+  Future<void> saveLastRegisteredPushToken(String token);
+  Future<void> deleteLastRegisteredPushToken();
+
+  Future<String?> getLastRegisteredTokenHash();
+  Future<void> saveLastRegisteredTokenHash(String hash);
+  Future<void> deleteLastRegisteredTokenHash();
+
   Future<void> clearAll();
 }
 
@@ -24,6 +32,8 @@ class FlutterSecureStorageService implements SecureStorageService {
   static const String _keyRefreshToken = 'upostit_auth_refresh_token';
   static const String _keyTenantSlug = 'upostit_tenant_slug';
   static const String _keyUserEmail = 'upostit_user_email';
+  static const String _keyPushToken = 'upostit_last_push_token';
+  static const String _keyPushTokenHash = 'upostit_last_push_token_hash';
 
   FlutterSecureStorageService({FlutterSecureStorage? storage})
       : _storage = storage ??
@@ -105,9 +115,57 @@ class FlutterSecureStorageService implements SecureStorageService {
   }
 
   @override
+  Future<String?> getLastRegisteredPushToken() async {
+    try {
+      return await _storage.read(key: _keyPushToken);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> saveLastRegisteredPushToken(String token) async {
+    try {
+      await _storage.write(key: _keyPushToken, value: token);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> deleteLastRegisteredPushToken() async {
+    try {
+      await _storage.delete(key: _keyPushToken);
+    } catch (_) {}
+  }
+
+  @override
+  Future<String?> getLastRegisteredTokenHash() async {
+    try {
+      return await _storage.read(key: _keyPushTokenHash);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> saveLastRegisteredTokenHash(String hash) async {
+    try {
+      await _storage.write(key: _keyPushTokenHash, value: hash);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> deleteLastRegisteredTokenHash() async {
+    try {
+      await _storage.delete(key: _keyPushTokenHash);
+    } catch (_) {}
+  }
+
+  @override
   Future<void> clearAll() async {
     try {
       await _storage.delete(key: _keyRefreshToken);
+      await _storage.delete(key: _keyPushToken);
+      await _storage.delete(key: _keyPushTokenHash);
       // We deliberately preserve tenant slug and email for login screen UX convenience
     } catch (e) {
       throw const StorageException('Failed to clear secure credentials');

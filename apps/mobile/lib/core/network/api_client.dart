@@ -83,6 +83,27 @@ class ApiClient {
     }
   }
 
+  /// Sends a DELETE request and maps responses or exceptions.
+  Future<Response<T>> delete<T>(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    try {
+      return await dio.delete<T>(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    } catch (e) {
+      throw ServerException(e.toString());
+    }
+  }
+
   /// Translates [DioException] into strongly typed [AppException].
   AppException _handleDioError(DioException error) {
     if (error.type == DioExceptionType.connectionTimeout ||

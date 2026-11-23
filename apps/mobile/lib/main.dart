@@ -29,6 +29,12 @@ import 'features/leave/data/datasources/leave_remote_data_source.dart';
 import 'features/leave/data/repositories/leave_repository_impl.dart';
 import 'features/leave/domain/repositories/leave_repository.dart';
 import 'features/leave/presentation/bloc/leave_bloc.dart';
+import 'features/notifications/data/datasources/notification_remote_data_source.dart';
+import 'features/notifications/data/repositories/notification_repository_impl.dart';
+import 'features/notifications/data/services/firebase_push_notification_service.dart';
+import 'features/notifications/domain/repositories/notification_repository.dart';
+import 'features/notifications/presentation/bloc/notification_bloc.dart';
+import 'features/notifications/presentation/bloc/notification_event.dart';
 import 'features/profile/data/datasources/profile_remote_data_source.dart';
 import 'features/profile/data/repositories/profile_repository_impl.dart';
 import 'features/profile/domain/usecases/get_profile_usecase.dart';
@@ -156,7 +162,37 @@ void main() {
   final leaveRepository = LeaveRepositoryImpl(leaveRemoteDataSource);
   final leaveBloc = LeaveBloc(repository: leaveRepository);
 
-  // 10. Run Application Shell with Root Providers
+  // 10. Notification Feature Dependencies
+  final pushService = FirebasePushNotificationService();
+  final notificationRemoteDataSource =
+      NotificationRemoteDataSourceImpl(apiClient);
+  final notificationRepository = NotificationRepositoryImpl(
+    remoteDataSource: notificationRemoteDataSource,
+    secureStorage: secureStorage,
+  );
+  final notificationBloc = NotificationBloc(
+    repository: notificationRepository,
+    pushService: pushService,
+    deviceIdentityService: deviceIdentityService,
+    isUserAuthenticated: () => authBloc.state is Authenticated,
+  );
+
+  // Auto-register push tokens when authenticated, or revoke on logout
+  authBloc.stream.listen((authState) {
+    if (authState is Authenticated) {
+      notificationBloc.add(const InitializePushNotifications());
+    } else if (authState is Unauthenticated) {
+      notificationBloc.add(const RevokeDeviceTokenRequested());
+      notificationBloc.add(const ClearNotificationSession());
+    }
+  });
+
+  // If already authenticated on cold boot (e.g. session restored)
+  if (authBloc.state is Authenticated) {
+    notificationBloc.add(const InitializePushNotifications());
+  }
+
+  // 11. Run Application Shell with Root Providers
   runApp(
     MultiRepositoryProvider(
       providers: [
@@ -169,6 +205,8 @@ void main() {
         RepositoryProvider<DeviceIdentityService>.value(
             value: deviceIdentityService),
         RepositoryProvider<DeviceRepository>.value(value: deviceRepository),
+        RepositoryProvider<NotificationRepository>.value(
+            value: notificationRepository),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -180,6 +218,7 @@ void main() {
           BlocProvider<ScheduleBloc>.value(value: scheduleBloc),
           BlocProvider<LeaveBloc>.value(value: leaveBloc),
           BlocProvider<DeviceBloc>.value(value: deviceBloc),
+          BlocProvider<NotificationBloc>.value(value: notificationBloc),
         ],
         child: const AttendanceApp(),
       ),

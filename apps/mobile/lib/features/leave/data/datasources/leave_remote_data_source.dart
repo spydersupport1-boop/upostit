@@ -111,7 +111,8 @@ class LeaveRemoteDataSourceImpl implements LeaveRemoteDataSource {
     final list = data?['items'] ?? data?['data'];
     if (list is List) {
       return list
-          .map((item) => LeaveRequestModel.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              LeaveRequestModel.fromJson(item as Map<String, dynamic>))
           .toList();
     }
     return [];
@@ -126,7 +127,8 @@ class LeaveRemoteDataSourceImpl implements LeaveRemoteDataSource {
   }
 
   @override
-  Future<LeaveRequestModel> cancelLeaveRequest(String id, {String? reason}) async {
+  Future<LeaveRequestModel> cancelLeaveRequest(String id,
+      {String? reason}) async {
     final response = await apiClient.post<Map<String, dynamic>>(
       ApiEndpoints.leaveRequestCancel(id),
       data: {
@@ -152,7 +154,8 @@ class LeaveRemoteDataSourceImpl implements LeaveRemoteDataSource {
     final list = data?['items'] ?? data?['data'];
     if (list is List) {
       return list
-          .map((item) => LeaveRequestModel.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              LeaveRequestModel.fromJson(item as Map<String, dynamic>))
           .toList();
     }
     return [];
@@ -175,7 +178,8 @@ class LeaveRemoteDataSourceImpl implements LeaveRemoteDataSource {
   }
 
   @override
-  Future<List<UpcomingHolidayModel>> getUpcomingHolidays({int limit = 15}) async {
+  Future<List<UpcomingHolidayModel>> getUpcomingHolidays(
+      {int limit = 15}) async {
     final response = await apiClient.get<Map<String, dynamic>>(
       ApiEndpoints.holidaysUpcoming,
       queryParameters: {'limit': limit},

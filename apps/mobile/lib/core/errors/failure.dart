@@ -41,3 +41,11 @@ class StorageFailure extends Failure {
   const StorageFailure(
       [super.message = 'Failed to access local secure credentials']);
 }
+
+class ApiGapFailure extends Failure {
+  const ApiGapFailure(
+      [super.message =
+          'This operation is not yet supported by the server API (architectural gap).',
+      int? statusCode = 404])
+      : super(statusCode: statusCode);
+}

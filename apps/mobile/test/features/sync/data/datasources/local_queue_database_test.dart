@@ -80,7 +80,7 @@ void main() {
         (m) => m['key'] == 'schema_version',
         orElse: () => {},
       );
-      expect(versionRow['value'], equals('1'));
+      expect(versionRow['value'], equals(LocalQueueDatabase.databaseVersion.toString()));
 
       // Verify queue table exists
       final queueRows = await db.query(LocalQueueDatabase.queueTable);

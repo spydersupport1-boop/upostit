@@ -251,13 +251,15 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
 
                   // If Half Day: Period selection
                   if (_isHalfDay) ...[
-                    Text('Half-Day Session', style: AppTypography.headingMedium),
+                    Text('Half-Day Session',
+                        style: AppTypography.headingMedium),
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
                         Expanded(
                           child: ChoiceChip(
-                            label: const Center(child: Text('First Half (Morning)')),
+                            label: const Center(
+                                child: Text('First Half (Morning)')),
                             selected: _halfDayPeriod == 'FIRST_HALF',
                             selectedColor: AppColors.primaryLight,
                             onSelected: (selected) {
@@ -270,8 +272,8 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                         const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: ChoiceChip(
-                            label:
-                                const Center(child: Text('Second Half (Afternoon)')),
+                            label: const Center(
+                                child: Text('Second Half (Afternoon)')),
                             selected: _halfDayPeriod == 'SECOND_HALF',
                             selectedColor: AppColors.primaryLight,
                             onSelected: (selected) {
@@ -391,7 +393,9 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                         ),
                         if (_selectedType != null)
                           Text(
-                            _selectedType!.isPaid ? 'Paid Leave' : 'Unpaid Leave',
+                            _selectedType!.isPaid
+                                ? 'Paid Leave'
+                                : 'Unpaid Leave',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
