@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../attendance/data/datasources/attendance_remote_data_source.dart';
 import '../../data/models/offline_conflict_bundle_submit_request_model.dart';
+import '../../data/services/unified_sync_coordinator.dart';
 import '../../domain/entities/offline_sequence_conflict_bundle.dart';
 import '../../domain/entities/sync_queue_summary.dart';
 import '../../domain/entities/sync_result.dart';
@@ -19,9 +20,11 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
   final SyncWorker _syncWorker;
   final NetworkConnectivityService? _connectivityService;
   final AttendanceRemoteDataSource? _remoteDataSource;
+  final UnifiedSyncCoordinator? _unifiedCoordinator;
 
   StreamSubscription<bool>? _connectivitySub;
   StreamSubscription<SyncResult>? _syncResultSub;
+  StreamSubscription<UnifiedSyncProgress>? _unifiedProgressSub;
 
   String? _activeTenantId;
   String? _activeUserId;
@@ -31,10 +34,12 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     required SyncWorker syncWorker,
     NetworkConnectivityService? connectivityService,
     AttendanceRemoteDataSource? remoteDataSource,
+    UnifiedSyncCoordinator? unifiedCoordinator,
   })  : _localQueueDao = localQueueDao,
         _syncWorker = syncWorker,
         _connectivityService = connectivityService,
         _remoteDataSource = remoteDataSource,
+        _unifiedCoordinator = unifiedCoordinator,
         super(const SyncState()) {
     on<SyncSummaryRequested>(_onSummaryRequested);
     on<SyncNowRequested>(_onSyncNowRequested);
@@ -43,6 +48,7 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     on<SyncConflictBundlesRequested>(_onConflictBundlesRequested);
     on<SyncSubmitConflictBundleRequested>(_onSubmitConflictBundleRequested);
     on<SyncRefreshConflictStatusRequested>(_onRefreshConflictStatusRequested);
+    on<SyncUnifiedProgressReceived>(_onUnifiedProgressReceived);
 
     // 1. Initial connectivity check
     final connectivity = _connectivityService;
@@ -77,6 +83,18 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
         } catch (_) {}
       }
     });
+
+    // 4. Listen to unified coordinator progress stream if provided
+    final coordinator = _unifiedCoordinator;
+    if (coordinator != null) {
+      _unifiedProgressSub = coordinator.progressStream.listen((progress) {
+        if (!isClosed) {
+          try {
+            add(SyncUnifiedProgressReceived(progress));
+          } catch (_) {}
+        }
+      });
+    }
   }
 
   Future<void> _onSummaryRequested(
@@ -159,10 +177,25 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
       clearSuccess: true,
     ));
 
-    final result = await _syncWorker.synchronizeQueue(
-      tenantId: event.tenantId,
-      userId: event.userId,
-    );
+    final coordinator = _unifiedCoordinator;
+    final SyncResult result;
+    if (coordinator != null) {
+      final unifiedRes = await coordinator.synchronizeAll(
+        tenantId: event.tenantId,
+        userId: event.userId,
+      );
+      result = unifiedRes.upwardResult ??
+          SyncResult(
+            isCompleted: unifiedRes.isCompleted,
+            errorMessage: unifiedRes.errorMessage,
+            isAuthRequired: unifiedRes.isAuthRequired,
+          );
+    } else {
+      result = await _syncWorker.synchronizeQueue(
+        tenantId: event.tenantId,
+        userId: event.userId,
+      );
+    }
 
     // Refresh queue summary and history after sync run completes
     try {
@@ -461,10 +494,64 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     }
   }
 
+  void _onUnifiedProgressReceived(
+    SyncUnifiedProgressReceived event,
+    Emitter<SyncState> emit,
+  ) {
+    final p = event.progress;
+    final phase = _mapUnifiedPhase(p.phase);
+    emit(state.copyWith(
+      phase: phase,
+      isSyncing: phase == SyncOperationalPhase.uploadingAttendance ||
+          phase == SyncOperationalPhase.downloadingReferenceData ||
+          phase == SyncOperationalPhase.applyingLocalUpdates ||
+          phase == SyncOperationalPhase.checkingConnectivity,
+      currentOperation: p.message,
+      lastSuccessfulUpload: p.lastSuccessfulUpload ?? state.lastSuccessfulUpload,
+      lastSuccessfulDownload:
+          p.lastSuccessfulDownload ?? state.lastSuccessfulDownload,
+      retryStatus: p.retryAfterSeconds != null
+          ? 'Next retry in ${p.retryAfterSeconds}s'
+          : null,
+      isAuthRequired: phase == SyncOperationalPhase.authenticationRequired,
+      hasConflictRequiresReview:
+          phase == SyncOperationalPhase.conflictRequiresReview,
+      isFatalStorageError: phase == SyncOperationalPhase.fatalLocalStorageError,
+    ));
+  }
+
+  SyncOperationalPhase _mapUnifiedPhase(UnifiedSyncPhase p) {
+    switch (p) {
+      case UnifiedSyncPhase.idle:
+        return SyncOperationalPhase.idle;
+      case UnifiedSyncPhase.checkingConnectivity:
+        return SyncOperationalPhase.checkingConnectivity;
+      case UnifiedSyncPhase.uploadingAttendance:
+        return SyncOperationalPhase.uploadingAttendance;
+      case UnifiedSyncPhase.downloadingReferenceData:
+        return SyncOperationalPhase.downloadingReferenceData;
+      case UnifiedSyncPhase.applyingLocalUpdates:
+        return SyncOperationalPhase.applyingLocalUpdates;
+      case UnifiedSyncPhase.waitingForRetry:
+        return SyncOperationalPhase.waitingForRetry;
+      case UnifiedSyncPhase.partiallySynchronized:
+        return SyncOperationalPhase.partiallySynchronized;
+      case UnifiedSyncPhase.fullySynchronized:
+        return SyncOperationalPhase.fullySynchronized;
+      case UnifiedSyncPhase.authenticationRequired:
+        return SyncOperationalPhase.authenticationRequired;
+      case UnifiedSyncPhase.conflictRequiresReview:
+        return SyncOperationalPhase.conflictRequiresReview;
+      case UnifiedSyncPhase.fatalLocalStorageError:
+        return SyncOperationalPhase.fatalLocalStorageError;
+    }
+  }
+
   @override
   Future<void> close() {
     _connectivitySub?.cancel();
     _syncResultSub?.cancel();
+    _unifiedProgressSub?.cancel();
     return super.close();
   }
 }

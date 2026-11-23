@@ -7,6 +7,8 @@ class DownwardSyncResult {
   final String? errorMessage;
   final DateTime completedAt;
 
+  bool get isFailure => !isSuccess;
+
   const DownwardSyncResult({
     required this.isSuccess,
     required this.syncType,

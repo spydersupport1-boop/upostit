@@ -40,10 +40,15 @@ import 'features/profile/data/repositories/profile_repository_impl.dart';
 import 'features/profile/domain/usecases/get_profile_usecase.dart';
 import 'features/profile/presentation/bloc/profile_bloc.dart';
 import 'features/sync/data/datasources/database_key_provider.dart';
+import 'features/sync/data/datasources/downward_sync_dao.dart';
+import 'features/sync/data/datasources/downward_sync_remote_data_source.dart';
 import 'features/sync/data/datasources/local_queue_database.dart';
 import 'features/sync/data/datasources/network_connectivity_service_impl.dart';
 import 'features/sync/data/datasources/sqflite_local_queue_dao.dart';
+import 'features/sync/data/services/background_sync_scheduler.dart';
+import 'features/sync/data/services/downward_sync_coordinator.dart';
 import 'features/sync/data/services/sync_worker_impl.dart';
+import 'features/sync/data/services/unified_sync_coordinator.dart';
 import 'features/sync/domain/repositories/local_queue_dao.dart';
 import 'features/sync/domain/repositories/network_connectivity_service.dart';
 import 'features/sync/domain/repositories/sync_worker.dart';
@@ -107,18 +112,38 @@ void main() {
   final keyProvider = FlutterSecureStorageDatabaseKeyProvider();
   final queueDatabase = LocalQueueDatabase(keyProvider: keyProvider);
   final localQueueDao = SqfliteLocalQueueDao(database: queueDatabase);
+  final downwardSyncDao = SqfliteDownwardSyncDao(queueDatabase);
   final connectivityService = NetworkConnectivityServiceImpl();
   final attendanceRemoteDataSource = AttendanceRemoteDataSourceImpl(apiClient);
+  final downwardRemoteDataSource = DownwardSyncRemoteDataSourceImpl(apiClient);
+  final downwardCoordinator = DownwardSyncCoordinator(
+    remoteDataSource: downwardRemoteDataSource,
+    dao: downwardSyncDao,
+    connectivityService: connectivityService,
+  );
   final syncWorker = SyncWorkerImpl(
     localQueueDao: localQueueDao,
     remoteDataSource: attendanceRemoteDataSource,
     connectivityService: connectivityService,
   );
+  final unifiedSyncCoordinator = UnifiedSyncCoordinator(
+    syncWorker: syncWorker,
+    downwardCoordinator: downwardCoordinator,
+    localQueueDao: localQueueDao,
+    downwardDao: downwardSyncDao,
+    connectivityService: connectivityService,
+  );
+  final backgroundScheduler = DefaultBackgroundSyncScheduler(
+    unifiedCoordinator: unifiedSyncCoordinator,
+    connectivityService: connectivityService,
+  );
+  backgroundScheduler.initialize();
   final syncBloc = SyncBloc(
     localQueueDao: localQueueDao,
     syncWorker: syncWorker,
     connectivityService: connectivityService,
     remoteDataSource: attendanceRemoteDataSource,
+    unifiedCoordinator: unifiedSyncCoordinator,
   );
 
   // 6. Device Identity & Binding Dependencies
@@ -177,19 +202,29 @@ void main() {
     isUserAuthenticated: () => authBloc.state is Authenticated,
   );
 
-  // Auto-register push tokens when authenticated, or revoke on logout
+  // Auto-register push tokens and schedule background sync when authenticated, or revoke on logout
   authBloc.stream.listen((authState) {
     if (authState is Authenticated) {
       notificationBloc.add(const InitializePushNotifications());
+      backgroundScheduler.schedulePeriodicSync(
+        tenantId: authState.tenant.id,
+        userId: authState.user.id,
+      );
     } else if (authState is Unauthenticated) {
       notificationBloc.add(const RevokeDeviceTokenRequested());
       notificationBloc.add(const ClearNotificationSession());
+      backgroundScheduler.cancelPeriodicSync();
     }
   });
 
   // If already authenticated on cold boot (e.g. session restored)
   if (authBloc.state is Authenticated) {
+    final authState = authBloc.state as Authenticated;
     notificationBloc.add(const InitializePushNotifications());
+    backgroundScheduler.schedulePeriodicSync(
+      tenantId: authState.tenant.id,
+      userId: authState.user.id,
+    );
   }
 
   // 11. Run Application Shell with Root Providers
@@ -197,7 +232,14 @@ void main() {
     MultiRepositoryProvider(
       providers: [
         RepositoryProvider<LocalQueueDao>.value(value: localQueueDao),
+        RepositoryProvider<DownwardSyncDao>.value(value: downwardSyncDao),
         RepositoryProvider<SyncWorker>.value(value: syncWorker),
+        RepositoryProvider<DownwardSyncCoordinator>.value(
+            value: downwardCoordinator),
+        RepositoryProvider<UnifiedSyncCoordinator>.value(
+            value: unifiedSyncCoordinator),
+        RepositoryProvider<BackgroundSyncScheduler>.value(
+            value: backgroundScheduler),
         RepositoryProvider<NetworkConnectivityService>.value(
             value: connectivityService),
         RepositoryProvider<HistoryRepository>.value(value: historyRepository),

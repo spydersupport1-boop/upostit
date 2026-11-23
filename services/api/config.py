@@ -86,6 +86,28 @@ class Settings(BaseSettings):
     EMAIL_FROM_ADDRESS: str = Field(default="noreply@attendance.io")
     EMAIL_FROM_NAME: str = Field(default="Attendance SaaS")
 
+    # Phase 10 Notification & FCM Push Configuration
+    PUSH_TOKEN_ENCRYPTION_KEY: str = Field(
+        default="",
+        description="URL-safe base64-encoded 32-byte key for Fernet authenticated encryption.",
+    )
+    FIREBASE_CREDENTIALS_PATH: str = Field(
+        default="",
+        description="Filesystem path to Firebase service-account JSON file.",
+    )
+    FIREBASE_CREDENTIALS_JSON: str = Field(
+        default="",
+        description="Raw JSON string of Firebase service-account credentials.",
+    )
+    FIREBASE_PROJECT_ID: str = Field(
+        default="",
+        description="Optional Google Cloud / Firebase Project ID.",
+    )
+    FCM_ENABLED: bool = Field(
+        default=False,
+        description="Flag enabling live FCM delivery (requires valid credentials).",
+    )
+
     @property
     def effective_jwt_secret(self) -> str:
         """Returns the configured JWT_SECRET_KEY, falling back to SECRET_KEY."""

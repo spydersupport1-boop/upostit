@@ -7,6 +7,7 @@ class SyncResult extends Equatable {
   final int quarantinedCount;
   final int retryableFailureCount;
   final bool isCompleted;
+  final bool isAuthRequired;
   final String? errorMessage;
   final int? retryAfterSeconds;
 
@@ -16,6 +17,7 @@ class SyncResult extends Equatable {
     this.quarantinedCount = 0,
     this.retryableFailureCount = 0,
     this.isCompleted = true,
+    this.isAuthRequired = false,
     this.errorMessage,
     this.retryAfterSeconds,
   });
@@ -31,6 +33,7 @@ class SyncResult extends Equatable {
     int? quarantinedCount,
     int? retryableFailureCount,
     bool? isCompleted,
+    bool? isAuthRequired,
     String? errorMessage,
     int? retryAfterSeconds,
   }) {
@@ -42,6 +45,7 @@ class SyncResult extends Equatable {
       retryableFailureCount:
           retryableFailureCount ?? this.retryableFailureCount,
       isCompleted: isCompleted ?? this.isCompleted,
+      isAuthRequired: isAuthRequired ?? this.isAuthRequired,
       errorMessage: errorMessage ?? this.errorMessage,
       retryAfterSeconds: retryAfterSeconds ?? this.retryAfterSeconds,
     );
@@ -54,6 +58,7 @@ class SyncResult extends Equatable {
         quarantinedCount,
         retryableFailureCount,
         isCompleted,
+        isAuthRequired,
         errorMessage,
         retryAfterSeconds,
       ];

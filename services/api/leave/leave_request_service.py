@@ -1,5 +1,6 @@
 """Service layer for Leave Application, Balance Tracking, and Supervisor Adjudication."""
 
+import logging
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -27,6 +28,8 @@ from services.api.leave.schemas import (
     LeaveRequestCreate,
     LeaveRequestResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def map_leave_balance_to_response(bal: LeaveBalance, lt: LeaveType) -> LeaveBalanceResponse:
@@ -418,6 +421,30 @@ async def apply_leave_request(
 
     session.add(leave_request)
     await session.flush()
+
+    # Emit Phase 10 LeaveRequestSubmittedEvent (non-blocking)
+    try:
+        from services.api.notifications import LeaveRequestSubmittedEvent, dispatch_domain_event
+
+        await dispatch_domain_event(
+            session=session,
+            event=LeaveRequestSubmittedEvent(
+                tenant_id=tenant_id,
+                leave_request_id=leave_request.id,
+                employee_id=employee.id,
+                employee_name=f"{employee.first_name} {employee.last_name}".strip(),
+                leave_type=leave_type.name,
+                start_date=leave_request.start_date,
+                end_date=leave_request.end_date,
+                total_days=leave_request.total_days,
+                reason=leave_request.reason,
+                supervisor_id=employee.reporting_manager_id,
+                actor_user_id=user_id,
+            ),
+        )
+    except Exception as exc:
+        logger.warning("Failed to dispatch leave submitted notification: %s", exc)
+
     return leave_request
 
 
@@ -652,6 +679,31 @@ async def cancel_leave_request(
             curr += timedelta(days=1)
 
     await session.flush()
+
+    # Emit Phase 10 LeaveRequestCancelledEvent (non-blocking)
+    try:
+        from services.api.notifications import LeaveRequestCancelledEvent, dispatch_domain_event
+
+        await dispatch_domain_event(
+            session=session,
+            event=LeaveRequestCancelledEvent(
+                tenant_id=tenant_id,
+                leave_request_id=leave_req.id,
+                employee_id=leave_req.employee_id,
+                employee_name=f"{leave_req.employee.first_name} {leave_req.employee.last_name}".strip()
+                if leave_req.employee
+                else "Employee",
+                leave_type=leave_req.leave_type.name if leave_req.leave_type else "Leave",
+                start_date=leave_req.start_date,
+                end_date=leave_req.end_date,
+                cancellation_reason=reason.strip() if reason else "Cancelled by employee",
+                supervisor_id=leave_req.employee.reporting_manager_id if leave_req.employee else None,
+                actor_user_id=user_id,
+            ),
+        )
+    except Exception as exc:
+        logger.warning("Failed to dispatch leave cancelled notification: %s", exc)
+
     return leave_req
 
 
@@ -920,4 +972,53 @@ async def adjudicate_leave_request(
         leave_req.updated_at = now
 
     await session.flush()
+
+    # Emit Phase 10 Leave Request Adjudication Event (non-blocking)
+    try:
+        from services.api.notifications import (
+            LeaveRequestApprovedEvent,
+            LeaveRequestRejectedEvent,
+            dispatch_domain_event,
+        )
+
+        emp_name = (
+            f"{leave_req.employee.first_name} {leave_req.employee.last_name}".strip()
+            if leave_req.employee
+            else "Employee"
+        )
+        leave_name = leave_req.leave_type.name if leave_req.leave_type else "Leave"
+
+        if action_upper == "APPROVE":
+            await dispatch_domain_event(
+                session=session,
+                event=LeaveRequestApprovedEvent(
+                    tenant_id=tenant_id,
+                    leave_request_id=leave_req.id,
+                    employee_id=leave_req.employee_id,
+                    employee_name=emp_name,
+                    leave_type=leave_name,
+                    start_date=leave_req.start_date,
+                    end_date=leave_req.end_date,
+                    supervisor_comment=reason.strip() if reason else "Approved by supervisor",
+                    actor_user_id=reviewer_user_id,
+                ),
+            )
+        elif action_upper == "REJECT":
+            await dispatch_domain_event(
+                session=session,
+                event=LeaveRequestRejectedEvent(
+                    tenant_id=tenant_id,
+                    leave_request_id=leave_req.id,
+                    employee_id=leave_req.employee_id,
+                    employee_name=emp_name,
+                    leave_type=leave_name,
+                    start_date=leave_req.start_date,
+                    end_date=leave_req.end_date,
+                    rejection_reason=reason.strip() if reason else "Rejected by supervisor",
+                    actor_user_id=reviewer_user_id,
+                ),
+            )
+    except Exception as exc:
+        logger.warning("Failed to dispatch leave adjudication notification: %s", exc)
+
     return leave_req, recalculated_days

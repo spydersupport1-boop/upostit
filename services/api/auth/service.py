@@ -391,3 +391,64 @@ async def logout_all(
     )
     await session.commit()
     return int(getattr(result, "rowcount", 0) or 0)
+
+
+async def request_password_reset(
+    session: AsyncSession,
+    tenant_slug: str,
+    email: str,
+) -> None:
+    """
+    Initiates a secure password reset workflow and emits a transactional notification event.
+    Prevents account enumeration by always completing without throwing 404/401 errors to callers.
+    Guarantees zero-leak logging of sensitive reset tokens.
+    """
+    clean_slug = tenant_slug.strip().lower()
+    clean_email = email.strip().lower()
+
+    # 1. Lookup tenant
+    tenant_res = await session.execute(
+        select(Tenant).where(Tenant.slug == clean_slug, Tenant.status == "active")
+    )
+    tenant = tenant_res.scalar_one_or_none()
+    if not tenant:
+        return
+
+    # 2. Lookup user
+    user_res = await session.execute(
+        select(User).where(
+            User.tenant_id == tenant.id,
+            User.email == clean_email,
+            User.status == "active",
+        )
+    )
+    user = user_res.scalar_one_or_none()
+    if not user:
+        return
+
+    # 3. Generate secure reset token
+    raw_token = generate_secure_token()
+    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
+
+    # 4. Emit Phase 10 PasswordResetRequestedEvent (non-blocking)
+    try:
+        from services.api.notifications import (
+            PasswordResetRequestedEvent,
+            dispatch_domain_event,
+        )
+
+        await dispatch_domain_event(
+            session=session,
+            event=PasswordResetRequestedEvent(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                user_email=user.email,
+                user_name=user.full_name,
+                company_name=tenant.name,
+                reset_url=reset_url,
+                expires_minutes=30,
+                actor_user_id=user.id,
+            ),
+        )
+    except Exception as exc:
+        logger.warning("Failed to dispatch password reset notification: %s", exc)

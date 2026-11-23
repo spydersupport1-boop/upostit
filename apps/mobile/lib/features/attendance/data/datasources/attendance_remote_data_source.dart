@@ -1,5 +1,6 @@
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../../sync/data/models/batch_sync_models.dart';
 import '../../../sync/data/models/employee_conflict_incident_list_model.dart';
 import '../../../sync/data/models/offline_conflict_bundle_submit_request_model.dart';
 import '../../../sync/data/models/offline_conflict_incident_model.dart';
@@ -48,6 +49,10 @@ abstract class AttendanceRemoteDataSource {
     String? status,
     int limit = 50,
   });
+
+  /// Submits a batch of offline attendance events to the batch sync protocol.
+  Future<AttendanceBatchSyncResponseModel> syncBatch(
+      AttendanceBatchSyncRequestModel request);
 }
 
 /// Implementation of [AttendanceRemoteDataSource] using [ApiClient].
@@ -189,6 +194,18 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
       },
     );
     return EmployeeConflictIncidentListModel.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  @override
+  Future<AttendanceBatchSyncResponseModel> syncBatch(
+      AttendanceBatchSyncRequestModel request) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.syncBatch,
+      data: request.toJson(),
+    );
+    return AttendanceBatchSyncResponseModel.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
