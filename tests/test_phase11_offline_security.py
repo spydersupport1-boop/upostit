@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import status
 from httpx import ASGITransport, AsyncClient
 
 from services.api.auth.dependencies import AuthenticatedContext, get_authenticated_context
