@@ -155,8 +155,29 @@ export default function SupervisorConflictsPage() {
         return <span className="badge badge-green">Approved</span>;
       case "REJECTED":
         return <span className="badge badge-red">Rejected</span>;
+      case "NEEDS_CLARIFICATION":
+        return <span className="badge badge-purple">Needs Clarification</span>;
+      case "UNRESOLVED":
+        return <span className="badge badge-yellow" style={{ background: "rgba(249, 115, 22, 0.15)", color: "#f97316" }}>Unresolved</span>;
+      case "ESCALATED_HR":
+        return <span className="badge badge-red" style={{ fontWeight: 700 }}>Escalated to HR</span>;
+      case "AUTO_RESOLVED":
+        return <span className="badge badge-green">Auto-Resolved</span>;
       default:
         return <span className="badge">{status}</span>;
+    }
+  };
+
+  const getSeverityBadge = (severity?: string | null) => {
+    switch ((severity || "MEDIUM").toUpperCase()) {
+      case "CRITICAL":
+        return <span className="badge badge-red" style={{ fontWeight: 700 }}>CRITICAL</span>;
+      case "HIGH":
+        return <span className="badge badge-yellow" style={{ color: "#ea580c", fontWeight: 700 }}>HIGH</span>;
+      case "LOW":
+        return <span className="badge" style={{ opacity: 0.8 }}>LOW</span>;
+      default:
+        return <span className="badge badge-yellow">MEDIUM</span>;
     }
   };
 
@@ -458,6 +479,10 @@ export default function SupervisorConflictsPage() {
             <option value="PENDING_REVIEW">Pending Review</option>
             <option value="APPROVED">Approved</option>
             <option value="REJECTED">Rejected</option>
+            <option value="NEEDS_CLARIFICATION">Needs Clarification</option>
+            <option value="UNRESOLVED">Unresolved</option>
+            <option value="ESCALATED_HR">Escalated to HR</option>
+            <option value="AUTO_RESOLVED">Auto-Resolved</option>
           </select>
 
           {/* Employee Filter (HR/Admin only) */}
@@ -546,7 +571,8 @@ export default function SupervisorConflictsPage() {
             <thead>
               <tr>
                 <th>Employee</th>
-                <th>Department</th>
+                <th>Conflict Type</th>
+                <th>Severity</th>
                 <th>Submitted</th>
                 <th>Primary Punch</th>
                 <th>Quarantined</th>
@@ -561,10 +587,15 @@ export default function SupervisorConflictsPage() {
                   <td>
                     <div style={{ fontWeight: 600 }}>{inc.employee_name}</div>
                     <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                      {inc.employee_code}
+                      {inc.employee_code} • {inc.department_name || "General"}
                     </div>
                   </td>
-                  <td>{inc.department_name || "—"}</td>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: "0.825rem", fontFamily: "monospace" }}>
+                      {inc.conflict_code || "SEQUENCE_CONFLICT"}
+                    </div>
+                  </td>
+                  <td>{getSeverityBadge(inc.severity)}</td>
                   <td style={{ fontSize: "0.85rem" }}>{formatDateTime(inc.submitted_at)}</td>
                   <td>
                     <span
@@ -595,6 +626,11 @@ export default function SupervisorConflictsPage() {
                     >
                       {inc.rejection_summary || "Policy violation"}
                     </div>
+                    {inc.employee_clarification && (
+                      <div style={{ fontSize: "0.72rem", color: "#34d399", marginTop: "2px" }}>
+                        💬 Clarification provided
+                      </div>
+                    )}
                   </td>
                   <td>{getStatusBadge(inc.status)}</td>
                   <td>

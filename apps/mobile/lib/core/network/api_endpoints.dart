@@ -24,10 +24,13 @@ class ApiEndpoints {
   static const String shiftAssignments = '/api/v1/shifts/assignments';
 
   // Offline Attendance Conflict routes (/api/v1/attendance)
+  static const String offlineConflicts = '/api/v1/attendance/offline-conflicts';
   static const String offlineConflictsSubmit =
       '/api/v1/attendance/offline-conflicts/submit';
   static const String offlineConflictsMy =
       '/api/v1/attendance/offline-conflicts/my';
+  static String offlineConflictClarify(String id) =>
+      '/api/v1/attendance/offline-conflicts/$id/clarify';
 
   // Device routes (/api/v1/devices)
   static const String devicesRegister = '/api/v1/devices/register';

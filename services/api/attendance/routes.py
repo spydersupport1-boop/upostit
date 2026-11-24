@@ -11,6 +11,7 @@ from services.api.attendance.conflict_service import (
     get_conflict_incident_detail,
     list_my_offline_conflict_incidents,
     list_supervisor_conflict_queue,
+    submit_employee_clarification,
     submit_offline_conflict_bundle,
 )
 from services.api.attendance.correction_service import (
@@ -31,6 +32,7 @@ from services.api.attendance.schemas import (
     AttendanceBatchSyncRequest,
     AttendanceBatchSyncResponse,
     AttendanceCombinationRule,
+    AttendanceConflictClarificationRequest,
     AttendanceConflictDecisionRequest,
     AttendanceConflictDecisionResponse,
     AttendanceConflictIncidentDetailResponse,
@@ -994,6 +996,34 @@ async def adjudicate_conflict_incident_endpoint(
         incident_id=incident_id,
         reviewer_user_id=ctx.user.id,
         reviewer_role=ctx.user.role,
+        payload=payload,
+    )
+    await db.commit()
+    return res
+
+
+@attendance_router.post(
+    "/offline-conflicts/{incident_id}/clarify",
+    response_model=AttendanceConflictIncidentDetailResponse,
+    summary="Submit employee clarification for an attendance conflict incident",
+    dependencies=[Depends(require_permission(Permission.SUBMIT_ATTENDANCE_CONFLICT))],
+)
+async def submit_conflict_clarification_endpoint(
+    incident_id: uuid.UUID,
+    payload: AttendanceConflictClarificationRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthenticatedContext = Depends(get_authenticated_context),
+) -> AttendanceConflictIncidentDetailResponse:
+    """Submits employee clarification notes for an attendance conflict incident.
+
+    Transitions incident from NEEDS_CLARIFICATION to PENDING_REVIEW.
+    """
+    res = await submit_employee_clarification(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=ctx.user.id,
+        user_role=ctx.user.role,
+        incident_id=incident_id,
         payload=payload,
     )
     await db.commit()

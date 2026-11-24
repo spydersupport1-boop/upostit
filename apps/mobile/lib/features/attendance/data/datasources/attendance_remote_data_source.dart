@@ -50,6 +50,12 @@ abstract class AttendanceRemoteDataSource {
     int limit = 50,
   });
 
+  /// Submits employee clarification notes for an attendance conflict incident.
+  Future<void> submitConflictClarification({
+    required String incidentId,
+    required String clarificationNotes,
+  });
+
   /// Submits a batch of offline attendance events to the batch sync protocol.
   Future<AttendanceBatchSyncResponseModel> syncBatch(
       AttendanceBatchSyncRequestModel request);
@@ -195,6 +201,19 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
     );
     return EmployeeConflictIncidentListModel.fromJson(
       response.data as Map<String, dynamic>,
+    );
+  }
+
+  @override
+  Future<void> submitConflictClarification({
+    required String incidentId,
+    required String clarificationNotes,
+  }) async {
+    await _apiClient.post(
+      ApiEndpoints.offlineConflictClarify(incidentId),
+      data: {
+        'clarification_notes': clarificationNotes,
+      },
     );
   }
 
