@@ -21,10 +21,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.attendance.models import (
+    AttendanceConflictIncident,
     AttendanceEvent,
     AttendanceIdempotencyRecord,
     Location,
     Tenant,
+)
+from services.api.attendance.multi_device_reconciliation import (
+    reconcile_employee_multi_device_sessions,
 )
 from services.api.attendance.policy_engine import (
     evaluate_punch_policy,
@@ -41,7 +45,7 @@ from services.api.attendance.schemas import (
 from services.api.attendance.service import (
     determine_shift_date_for_punch,
     get_tenant_offline_window_bounds,
-    recalculate_attendance_day,
+    recalculate_attendance_day,  # noqa: F401
 )
 from services.api.employees.models import Employee
 from services.api.fraud.engine import evaluate_and_persist_attendance_risk
@@ -514,6 +518,63 @@ async def process_attendance_batch_sync(
                     )
                     receipts.append(conflict_receipt)
                     seen_batch_keys[clean_key] = conflict_receipt
+
+                    # Automatically persist AttendanceConflictIncident for multi-device sequence conflicts
+                    try:
+                        inc_bundle = f"seq_{clean_key[:32]}"
+                        existing_inc = (
+                            await session.execute(
+                                select(AttendanceConflictIncident.id).where(
+                                    AttendanceConflictIncident.tenant_id == tenant_id,
+                                    AttendanceConflictIncident.bundle_id == inc_bundle,
+                                )
+                            )
+                        ).scalar_one_or_none()
+                        if not existing_inc:
+                            inc_code = (
+                                "UNPAIRED_CHECK_OUT"
+                                if item.event_type == "CHECK_OUT"
+                                else (
+                                    "DUPLICATE_CHECK_IN"
+                                    if item.event_type == "CHECK_IN"
+                                    else "SEQUENCE_CONFLICT"
+                                )
+                            )
+                            c_inc = AttendanceConflictIncident(
+                                tenant_id=tenant_id,
+                                employee_id=target_employee_id,
+                                user_id=user_id,
+                                bundle_id=inc_bundle,
+                                session_id=item.session_id,
+                                status="PENDING_REVIEW",
+                                conflict_code=inc_code,
+                                severity="HIGH",
+                                classification="NEEDS_MANAGER_REVIEW",
+                                primary_rejected_event={
+                                    "event_type": item.event_type,
+                                    "idempotency_key": clean_key,
+                                    "device_reported_at": item.device_reported_at.isoformat(),
+                                    "device_id_hash": payload.device_id or item.device_id,
+                                    "location_id": str(item.location_id) if item.location_id else None,
+                                    "latitude": float(item.latitude) if item.latitude is not None else None,
+                                    "longitude": float(item.longitude) if item.longitude is not None else None,
+                                },
+                                dependent_events=[],
+                                total_events_count=1,
+                                rejection_summary=state_conflict_error,
+                                employee_notes=f"Auto-captured sequence conflict from batch sync {payload.batch_id or 'direct'}",
+                                submitted_at=server_received_at,
+                                metadata_json={
+                                    "batch_id": payload.batch_id,
+                                    "local_id": item.local_id,
+                                    "error_code": "SEQUENCE_CONFLICT",
+                                },
+                            )
+                            session.add(c_inc)
+                            await session.flush()
+                    except Exception as inc_exc:
+                        logger.warning("Failed auto-creating conflict incident for sequence conflict: %s", inc_exc)
+
                     continue
 
                 # 4. Build Telemetry Metadata
@@ -705,19 +766,20 @@ async def process_attendance_batch_sync(
                 )
             )
 
-    # 7. Recalculate Daily Attendance Summaries for Affected Dates
+    # 7. Recalculate Daily Attendance Summaries & Reconcile Multi-Device Sessions
     for s_date in affected_shift_dates:
         try:
-            await recalculate_attendance_day(
+            await reconcile_employee_multi_device_sessions(
                 session=session,
                 tenant_id=tenant_id,
                 employee_id=target_employee_id,
                 attendance_date=s_date,
+                sync_batch_id=payload.batch_id,
             )
         except (StopIteration, StopAsyncIteration):
             pass
         except Exception as exc:
-            logger.warning("Failed recalculating day projection for date %s: %s", s_date, exc)
+            logger.warning("Failed reconciling multi-device day projection for date %s: %s", s_date, exc)
 
     # 8. Commit the Batch Transaction
     try:

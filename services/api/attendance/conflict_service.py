@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.api.attendance.correction_service import apply_attendance_correction
 from services.api.attendance.models import AttendanceConflictIncident
 from services.api.attendance.schemas import (
+    AttendanceConflictClarificationRequest,
     AttendanceConflictDecisionRequest,
     AttendanceConflictDecisionResponse,
     AttendanceConflictIncidentDetailResponse,
@@ -357,6 +358,12 @@ async def list_my_offline_conflict_incidents(
                 rejection_summary=r.rejection_summary,
                 employee_notes=r.employee_notes,
                 submitted_at=r.submitted_at,
+                conflict_code=r.conflict_code,
+                severity=r.severity or "MEDIUM",
+                classification=r.classification or "NEEDS_MANAGER_REVIEW",
+                employee_clarification=r.employee_clarification,
+                clarification_requested_at=r.clarification_requested_at,
+                clarification_submitted_at=r.clarification_submitted_at,
                 decision=r.decision,
                 decision_reason=r.decision_reason,
                 decided_at=r.decided_at,
@@ -540,6 +547,12 @@ async def list_supervisor_conflict_queue(
                 rejection_summary=inc.rejection_summary,
                 employee_notes=inc.employee_notes,
                 submitted_at=inc.submitted_at,
+                conflict_code=inc.conflict_code,
+                severity=inc.severity or "MEDIUM",
+                classification=inc.classification or "NEEDS_MANAGER_REVIEW",
+                employee_clarification=inc.employee_clarification,
+                clarification_requested_at=inc.clarification_requested_at,
+                clarification_submitted_at=inc.clarification_submitted_at,
                 decision=inc.decision,
                 decision_reason=inc.decision_reason,
                 reviewer_user_id=inc.reviewer_user_id,
@@ -675,6 +688,12 @@ async def get_conflict_incident_detail(
         rejection_summary=incident.rejection_summary,
         employee_notes=incident.employee_notes,
         submitted_at=incident.submitted_at,
+        conflict_code=incident.conflict_code,
+        severity=incident.severity or "MEDIUM",
+        classification=incident.classification or "NEEDS_MANAGER_REVIEW",
+        employee_clarification=incident.employee_clarification,
+        clarification_requested_at=incident.clarification_requested_at,
+        clarification_submitted_at=incident.clarification_submitted_at,
         assigned_reviewer_id=incident.assigned_reviewer_id,
         decision=incident.decision,
         decision_reason=incident.decision_reason,
@@ -787,10 +806,11 @@ async def adjudicate_conflict_incident(
                 detail="Insufficient privileges to adjudicate attendance conflicts.",
             )
 
-        # 4. Handle Rejection
-        if payload.action == "REJECT":
+        # 4. Handle Decisions
+        if payload.action in ("REJECT", "REJECT_INVALID_EVENTS"):
+            dec_val = "REJECTED" if payload.action == "REJECT" else payload.action
             incident.status = "REJECTED"
-            incident.decision = "REJECTED"
+            incident.decision = dec_val
             incident.decision_reason = payload.reason.strip()
             incident.reviewer_user_id = reviewer_user_id
             incident.decided_at = datetime.now(UTC)
@@ -830,7 +850,77 @@ async def adjudicate_conflict_incident(
                 employee_id=incident.employee_id,
                 bundle_id=incident.bundle_id,
                 status="REJECTED",
-                decision="REJECTED",
+                decision=dec_val,
+                decision_reason=incident.decision_reason,
+                reviewer_user_id=reviewer_user_id,
+                decided_at=incident.decided_at,
+                resolved_correction_event_ids=[],
+                affected_attendance_dates=[],
+                recalculated_days_count=0,
+            )
+
+        if payload.action == "REQUEST_CLARIFICATION":
+            incident.status = "NEEDS_CLARIFICATION"
+            incident.decision = "REQUEST_CLARIFICATION"
+            incident.decision_reason = payload.reason.strip()
+            incident.reviewer_user_id = reviewer_user_id
+            incident.decided_at = datetime.now(UTC)
+            incident.clarification_requested_at = incident.decided_at
+            incident.resolved_correction_event_ids = []
+            await session.flush()
+            return AttendanceConflictDecisionResponse(
+                id=incident.id,
+                tenant_id=incident.tenant_id,
+                employee_id=incident.employee_id,
+                bundle_id=incident.bundle_id,
+                status="NEEDS_CLARIFICATION",
+                decision="REQUEST_CLARIFICATION",
+                decision_reason=incident.decision_reason,
+                reviewer_user_id=reviewer_user_id,
+                decided_at=incident.decided_at,
+                resolved_correction_event_ids=[],
+                affected_attendance_dates=[],
+                recalculated_days_count=0,
+            )
+
+        if payload.action == "MARK_UNRESOLVED":
+            incident.status = "UNRESOLVED"
+            incident.decision = "MARK_UNRESOLVED"
+            incident.decision_reason = payload.reason.strip()
+            incident.reviewer_user_id = reviewer_user_id
+            incident.decided_at = datetime.now(UTC)
+            incident.resolved_correction_event_ids = []
+            await session.flush()
+            return AttendanceConflictDecisionResponse(
+                id=incident.id,
+                tenant_id=incident.tenant_id,
+                employee_id=incident.employee_id,
+                bundle_id=incident.bundle_id,
+                status="UNRESOLVED",
+                decision="MARK_UNRESOLVED",
+                decision_reason=incident.decision_reason,
+                reviewer_user_id=reviewer_user_id,
+                decided_at=incident.decided_at,
+                resolved_correction_event_ids=[],
+                affected_attendance_dates=[],
+                recalculated_days_count=0,
+            )
+
+        if payload.action == "ESCALATE_HR":
+            incident.status = "ESCALATED_HR"
+            incident.decision = "ESCALATE_HR"
+            incident.decision_reason = payload.reason.strip()
+            incident.reviewer_user_id = reviewer_user_id
+            incident.decided_at = datetime.now(UTC)
+            incident.resolved_correction_event_ids = []
+            await session.flush()
+            return AttendanceConflictDecisionResponse(
+                id=incident.id,
+                tenant_id=incident.tenant_id,
+                employee_id=incident.employee_id,
+                bundle_id=incident.bundle_id,
+                status="ESCALATED_HR",
+                decision="ESCALATE_HR",
                 decision_reason=incident.decision_reason,
                 reviewer_user_id=reviewer_user_id,
                 decided_at=incident.decided_at,
@@ -932,8 +1022,9 @@ async def adjudicate_conflict_incident(
             affected_dates.update(corr_res.affected_attendance_dates)
 
         # 6. Finalize Incident State
+        dec_val = "APPROVED" if payload.action == "APPROVE" else payload.action
         incident.status = "APPROVED"
-        incident.decision = "APPROVED"
+        incident.decision = dec_val
         incident.decision_reason = payload.reason.strip()
         incident.reviewer_user_id = reviewer_user_id
         incident.decided_at = datetime.now(UTC)
@@ -977,7 +1068,7 @@ async def adjudicate_conflict_incident(
             employee_id=incident.employee_id,
             bundle_id=incident.bundle_id,
             status="APPROVED",
-            decision="APPROVED",
+            decision=dec_val,
             decision_reason=incident.decision_reason,
             reviewer_user_id=reviewer_user_id,
             decided_at=incident.decided_at,
@@ -992,3 +1083,62 @@ async def adjudicate_conflict_incident(
     except Exception:
         await session.rollback()
         raise
+
+
+async def submit_employee_clarification(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    user_role: str,
+    incident_id: uuid.UUID,
+    payload: AttendanceConflictClarificationRequest,
+) -> AttendanceConflictIncidentDetailResponse:
+    """Submits employee clarification for an attendance conflict incident.
+
+    Transitions incident from NEEDS_CLARIFICATION to PENDING_REVIEW for supervisor re-review.
+    """
+    stmt = (
+        select(AttendanceConflictIncident)
+        .where(
+            AttendanceConflictIncident.tenant_id == tenant_id,
+            AttendanceConflictIncident.id == incident_id,
+        )
+        .with_for_update()
+    )
+    incident = (await session.execute(stmt)).scalar_one_or_none()
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance conflict incident not found.",
+        )
+
+    # Scoping: caller must be the incident's submitting user or employee
+    emp_stmt = select(Employee).where(
+        Employee.tenant_id == tenant_id,
+        Employee.user_id == user_id,
+    )
+    emp = (await session.execute(emp_stmt)).scalar_one_or_none()
+    if incident.user_id != user_id and (emp is None or emp.id != incident.employee_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Employees may only submit clarification for their own attendance conflicts.",
+        )
+
+    if incident.status not in ("NEEDS_CLARIFICATION", "PENDING_REVIEW"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot clarify incident in status '{incident.status}'.",
+        )
+
+    incident.employee_clarification = payload.clarification_notes.strip()
+    incident.clarification_submitted_at = datetime.now(UTC)
+    incident.status = "PENDING_REVIEW"
+    await session.flush()
+
+    return await get_conflict_incident_detail(
+        session=session,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        user_role=user_role,
+        incident_id=incident_id,
+    )
