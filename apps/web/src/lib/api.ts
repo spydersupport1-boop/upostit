@@ -1264,6 +1264,17 @@ export interface SupervisorConflictQueueItemDto {
   rejection_summary?: string | null;
   employee_notes?: string | null;
   submitted_at: string;
+  conflict_code?: string | null;
+  severity?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+  classification?:
+    | "AUTO_RESOLVABLE"
+    | "NEEDS_EMPLOYEE_CLARIFICATION"
+    | "NEEDS_MANAGER_REVIEW"
+    | "INVALID_UNAUTHORIZED"
+    | string;
+  employee_clarification?: string | null;
+  clarification_requested_at?: string | null;
+  clarification_submitted_at?: string | null;
   decision?: "APPROVE" | "REJECT" | string | null;
   decision_reason?: string | null;
   reviewer_user_id?: string | null;
@@ -1317,8 +1328,28 @@ export interface AttendanceConflictIncidentDetailDto {
   rejection_summary?: string | null;
   employee_notes?: string | null;
   submitted_at: string;
+  conflict_code?: string | null;
+  severity?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+  classification?:
+    | "AUTO_RESOLVABLE"
+    | "NEEDS_EMPLOYEE_CLARIFICATION"
+    | "NEEDS_MANAGER_REVIEW"
+    | "INVALID_UNAUTHORIZED"
+    | string;
+  employee_clarification?: string | null;
+  clarification_requested_at?: string | null;
+  clarification_submitted_at?: string | null;
   assigned_reviewer_id?: string | null;
-  decision?: "APPROVE" | "REJECT" | string | null;
+  decision?:
+    | "APPROVE"
+    | "REJECT"
+    | "ACCEPT_SEQUENCE"
+    | "REJECT_INVALID_EVENTS"
+    | "REQUEST_CLARIFICATION"
+    | "MARK_UNRESOLVED"
+    | "ESCALATE_HR"
+    | string
+    | null;
   decision_reason?: string | null;
   reviewer_user_id?: string | null;
   decided_at?: string | null;
@@ -1329,7 +1360,15 @@ export interface AttendanceConflictIncidentDetailDto {
 }
 
 export interface AttendanceConflictDecisionRequestDto {
-  action: "APPROVE" | "REJECT" | string;
+  action:
+    | "APPROVE"
+    | "REJECT"
+    | "ACCEPT_SEQUENCE"
+    | "REJECT_INVALID_EVENTS"
+    | "REQUEST_CLARIFICATION"
+    | "MARK_UNRESOLVED"
+    | "ESCALATE_HR"
+    | string;
   reason: string;
   override_location_id?: string | null;
 }
@@ -1404,6 +1443,20 @@ export const conflictApi = {
   ) =>
     apiFetch<AttendanceConflictDecisionResponseDto>(
       `/attendance/offline-conflicts/${incidentId}/decision`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+        token,
+      }
+    ),
+
+  submitClarification: (
+    incidentId: string,
+    data: { clarification_notes: string },
+    token?: string
+  ) =>
+    apiFetch<AttendanceConflictIncidentDetailDto>(
+      `/attendance/offline-conflicts/${incidentId}/clarify`,
       {
         method: "POST",
         body: JSON.stringify(data),

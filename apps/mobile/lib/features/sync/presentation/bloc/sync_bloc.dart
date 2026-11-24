@@ -48,6 +48,8 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
     on<SyncConflictBundlesRequested>(_onConflictBundlesRequested);
     on<SyncSubmitConflictBundleRequested>(_onSubmitConflictBundleRequested);
     on<SyncRefreshConflictStatusRequested>(_onRefreshConflictStatusRequested);
+    on<SyncSubmitConflictClarificationRequested>(
+        _onSubmitConflictClarificationRequested);
     on<SyncUnifiedProgressReceived>(_onUnifiedProgressReceived);
 
     // 1. Initial connectivity check
@@ -435,6 +437,53 @@ class SyncBloc extends Bloc<SyncEvent, SyncState> {
         isSubmittingConflict: false,
         clearSubmittingBundleId: true,
         conflictActionError: 'Submission failed: $e',
+      ));
+    }
+  }
+
+  Future<void> _onSubmitConflictClarificationRequested(
+    SyncSubmitConflictClarificationRequested event,
+    Emitter<SyncState> emit,
+  ) async {
+    final remoteDs = _remoteDataSource;
+    if (remoteDs == null) {
+      emit(state.copyWith(
+        conflictActionError: 'Remote submission not configured on device.',
+      ));
+      return;
+    }
+
+    emit(state.copyWith(
+      isSubmittingConflict: true,
+      clearConflictActionError: true,
+      clearConflictActionSuccess: true,
+    ));
+
+    try {
+      await remoteDs.submitConflictClarification(
+        incidentId: event.incidentId,
+        clarificationNotes: event.clarificationNotes,
+      );
+
+      emit(state.copyWith(
+        isSubmittingConflict: false,
+        conflictActionSuccess:
+            'Clarification submitted successfully. Supervisor will re-review your punches.',
+      ));
+
+      add(SyncRefreshConflictStatusRequested(
+        tenantId: _activeTenantId,
+        userId: _activeUserId,
+      ));
+    } on ServerException catch (se) {
+      emit(state.copyWith(
+        isSubmittingConflict: false,
+        conflictActionError: se.message,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        isSubmittingConflict: false,
+        conflictActionError: 'Failed to submit clarification: $e',
       ));
     }
   }

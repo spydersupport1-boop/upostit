@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 import '../../../../core/errors/app_exception.dart';
 import 'database_key_provider.dart';
@@ -457,5 +458,103 @@ class LocalQueueDatabase {
     } else {
       await deleteDatabase(path);
     }
+  }
+
+  /// Verifies database structural and cryptographic integrity via PRAGMA integrity_check.
+  Future<bool> verifyDatabaseIntegrity() async {
+    final db = database;
+    try {
+      final res = await db.rawQuery('PRAGMA integrity_check;');
+      if (res.isNotEmpty && res.first.values.first == 'ok') {
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Rotates the database encryption key in a crash-safe manner using SQLCipher PRAGMA rekey.
+  Future<void> rotateKey() async {
+    final keyProv = _keyProvider;
+    if (keyProv is! DatabaseKeyLifecycleProvider) {
+      throw const DatabaseEncryptionException(
+        'Key rotation is not supported by current key provider.',
+      );
+    }
+    final db = database;
+    final String newKey = await keyProv.prepareRotationKey();
+    final int nextVersion = await keyProv.getKeyVersion() + 1;
+
+    try {
+      await db.execute("PRAGMA rekey = '$newKey';");
+
+      final check = await db.query(
+        metadataTable,
+        where: 'key = ?',
+        whereArgs: ['encryption_engine'],
+      );
+      if (check.isEmpty || check.first['value'] != expectedEngine) {
+        throw const DatabaseEncryptionException(
+          'Rekey verification failed: metadata table not readable under new key.',
+        );
+      }
+
+      await db.insert(
+        metadataTable,
+        {'key': 'key_version', 'value': nextVersion.toString()},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await db.insert(
+        metadataTable,
+        {
+          'key': 'last_rotated_at',
+          'value': DateTime.now().toUtc().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      await keyProv.commitRotatedKey(
+        newKey: newKey,
+        newVersion: nextVersion,
+      );
+    } catch (e, stackTrace) {
+      await keyProv.abortRotation();
+      if (e is DatabaseEncryptionException) rethrow;
+      throw DatabaseEncryptionException(
+        'Failed to rotate database encryption key: $e',
+        e,
+        stackTrace,
+      );
+    }
+  }
+
+  /// Quarantines an unreadable or corrupted database file by renaming it to a timestamped backup,
+  /// preserving encrypted evidence on disk rather than silently deleting it.
+  Future<String?> quarantineCorruptedDatabase() async {
+    await close();
+    final String path;
+    if (_customPath != null) {
+      path = _customPath;
+    } else {
+      final factory = _factory;
+      final String dbDir = factory != null
+          ? await factory.getDatabasesPath()
+          : await getDatabasesPath();
+      path = '$dbDir/$databaseName';
+    }
+
+    if (path == inMemoryDatabasePath) return null;
+
+    final quarantinePath =
+        '$path.quarantine.${DateTime.now().millisecondsSinceEpoch}.bak';
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.rename(quarantinePath);
+        return quarantinePath;
+      }
+    } catch (_) {}
+    return null;
   }
 }

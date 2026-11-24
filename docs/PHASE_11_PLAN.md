@@ -201,30 +201,51 @@ flowchart TD
 
 ---
 
-### Milestone 11.5 — Advanced Multi-Device Conflict Arbitration & Session Reconciliation
-- **Objective**: Build intelligent arbitration for concurrent attendance sessions across multiple devices, distinguishing benign duplicates from legitimate conflicts and preventing data loss.
+### Milestone 11.5 — Advanced Multi-Device Conflict Arbitration & Session Reconciliation (Complete)
+- **Objective**: Build intelligent arbitration for concurrent attendance sessions across multiple devices, distinguishing benign duplicates and clean cross-device handoffs from legitimate conflicts and preventing data loss.
 - **Scope**:
-  - Track per-device sequence numbers (`device_id` + `sequence_number`) on backend.
-  - Implement chronological session arbitration: if an earlier offline punch from Device A arrives after an online punch from Device B, automatically reconcile the session timeline.
-  - Add multi-device conflict indicators and forensic audit metadata in the Next.js supervisor console (`/attendance/corrections/conflicts`).
+  - Implemented multi-device conflict detection engine (`services/api/attendance/conflict_detector.py`) classifying all 10 conflict types: `OVERLAPPING_SESSIONS`, `DUPLICATE_CHECK_IN`, `UNPAIRED_CHECK_OUT`, `MULTIPLE_CHECK_OUT`, `OUT_OF_ORDER_SYNC`, `CONFLICTING_OFFLINE_TIMESTAMPS`, `POST_RECONCILIATION_ARRIVAL`, `UNAUTHORIZED_OR_REVOKED_DEVICE`, `IMPOSSIBLE_TRAVEL_TIMELINE`, and `CONCURRENT_SYNC_RACE`.
+  - Implemented multi-device session reconciliation engine (`services/api/attendance/multi_device_reconciliation.py`) providing pure projection recalculation from immutable events, automatic clean cross-device handoffs (e.g. Device A check-in -> Device B check-out), and incident creation for unresolvable ambiguities.
+  - Added Alembic migration `c1d2e3f4a5b6_phase_11_multi_device_conflicts.py` and updated `AttendanceConflictIncident` with `conflict_code`, `severity`, `classification`, `employee_clarification`, `clarification_requested_at`, and `clarification_submitted_at`.
+  - Expanded supervisor conflict adjudication supporting all 5 actions: `ACCEPT_SEQUENCE`, `REJECT_INVALID_EVENTS`, `REQUEST_CLARIFICATION`, `MARK_UNRESOLVED`, and `ESCALATE_HR`.
+  - Implemented employee clarification endpoint: `POST /api/v1/attendance/offline-conflicts/{id}/clarify`.
+  - Flutter Mobile: Added `ConflictClarificationDialog`, updated `SyncBloc`, `SyncEvent`, and remote data sources.
+  - Next.js Web: Updated `/attendance/corrections/conflicts` page and `ConflictIncidentDetailModal` with severity/status filters, conflict badges, and full adjudication controls.
 - **Files/Modules Affected**:
-  - `services/api/attendance/service.py`
+  - `services/api/attendance/conflict_detector.py`
+  - `services/api/attendance/multi_device_reconciliation.py`
   - `services/api/attendance/conflict_service.py`
+  - `services/api/attendance/routes.py`
+  - `services/api/attendance/schemas.py`
+  - `services/api/attendance/models.py`
+  - `services/api/attendance/sync_service.py`
+  - `database/migrations/versions/c1d2e3f4a5b6_phase_11_multi_device_conflicts.py`
+  - `apps/mobile/lib/features/sync/presentation/widgets/conflict_clarification_dialog.dart`
+  - `apps/mobile/lib/features/sync/presentation/bloc/sync_bloc.dart`
+  - `apps/mobile/lib/features/sync/presentation/bloc/sync_event.dart`
+  - `apps/mobile/lib/features/sync/data/models/offline_conflict_incident_model.dart`
+  - `apps/mobile/lib/features/sync/data/models/employee_conflict_incident_list_model.dart`
+  - `apps/mobile/lib/features/attendance/data/datasources/attendance_remote_data_source.dart`
+  - `apps/mobile/lib/core/network/api_endpoints.dart`
   - `apps/web/src/app/attendance/corrections/conflicts/page.tsx`
+  - `apps/web/src/components/ConflictIncidentDetailModal.tsx`
   - `apps/web/src/lib/api.ts`
+  - `apps/web/src/lib/conflict-multi-device.test.ts`
+  - `tests/test_phase11_multi_device_arbitration.py`
 - **Dependencies**: Milestones 11.2–11.4.
-- **Database Impact**: None (reuses existing metadata JSON and event columns).
-- **API Impact**: Supervisor conflict details include multi-device discrepancy flags.
-- **Test Requirements**:
-  - Backend multi-device simulation in `tests/test_phase11_multi_device_arbitration.py`.
-  - Web console UI tests in `apps/web/src/lib/conflict-multi-device.test.ts`.
-- **Acceptance Criteria**:
-  - Earlier offline punches from a second device are safely reconciled without rejecting valid attendance history.
-  - Web console highlights multi-device overlaps clearly to supervisors.
+- **Database Impact**: `c1d2e3f4a5b6_phase_11_multi_device_conflicts.py` added 6 columns and 2 indexes to `attendance_conflict_incidents`.
+- **API Impact**:
+  - `POST /api/v1/attendance/offline-conflicts/{id}/clarify`
+  - Enhanced `POST /api/v1/attendance/offline-conflicts/{id}/decision` with Phase 11.5 actions.
+- **Test Requirements & Results**:
+  - Backend: 9/9 tests passed in `tests/test_phase11_multi_device_arbitration.py`; 888/888 total backend tests passed.
+  - Web: 135/135 tests passed; TypeScript 0 errors; ESLint 0 errors.
+  - Mobile: 444/444 tests passed; Flutter analyze 0 errors.
+- **Status**: **ACCEPTED & FULLY VERIFIED**
 
 ---
 
-### Milestone 11.6 — Offline Data Security, Key Lifecycle Recovery & Local Queue Eviction
+### Milestone 11.6 — Offline Data Security, Key Lifecycle Recovery & Local Queue Eviction (COMPLETED & VERIFIED)
 - **Objective**: Harden local SQLCipher encryption against hardware Keystore invalidation, implement scheduled eviction of aged synced events, and audit tamper-resistance.
 - **Scope**:
   - Implement graceful recovery in `DatabaseKeyProvider` and `LocalQueueDatabase` if platform Keystore invalidates the database key (e.g., passcode reset).

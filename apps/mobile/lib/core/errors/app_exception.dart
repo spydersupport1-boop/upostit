@@ -49,6 +49,50 @@ class DatabaseEncryptionException extends AppException {
   ]) : super(details: cause);
 }
 
+class DatabaseCorruptedException extends AppException {
+  final dynamic cause;
+  final String? quarantinedPath;
+
+  const DatabaseCorruptedException([
+    super.message =
+        'Encrypted database file cannot be decrypted or is corrupted. Fail-closed: database preserved.',
+    this.cause,
+    this.quarantinedPath,
+  ]) : super(details: cause);
+}
+
+class DatabaseRecoveryException extends AppException {
+  final dynamic cause;
+
+  const DatabaseRecoveryException([
+    super.message = 'Database recovery process failed or was aborted.',
+    this.cause,
+  ]) : super(details: cause);
+}
+
+class DeviceRevokedException extends AppException {
+  final String? deviceIdHash;
+  final String? revocationReason;
+
+  const DeviceRevokedException([
+    super.message =
+        'This device has been revoked by organization security. Offline punches are frozen.',
+    this.deviceIdHash,
+    this.revocationReason,
+  ]);
+}
+
+class StorageThresholdWarningException extends AppException {
+  final int currentCount;
+  final int maxCapacity;
+
+  const StorageThresholdWarningException(
+    this.currentCount,
+    this.maxCapacity, [
+    super.message = 'Offline storage usage is approaching maximum capacity.',
+  ]);
+}
+
 class QueueCapacityExceededException extends AppException {
   const QueueCapacityExceededException(
       [super.message =

@@ -738,6 +738,20 @@ class AttendanceConflictIncident(Base):
         nullable=False,
         default="PENDING_REVIEW",
     )
+    conflict_code: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    severity: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="MEDIUM",
+    )
+    classification: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="NEEDS_MANAGER_REVIEW",
+    )
     primary_rejected_event: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
@@ -758,6 +772,18 @@ class AttendanceConflictIncident(Base):
     )
     employee_notes: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True,
+    )
+    employee_clarification: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    clarification_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    clarification_submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
     )
     submitted_at: Mapped[datetime] = mapped_column(
@@ -837,11 +863,11 @@ class AttendanceConflictIncident(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED')",
+            "status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED') OR status IN ('NEEDS_CLARIFICATION', 'UNRESOLVED', 'ESCALATED_HR', 'AUTO_RESOLVED')",
             name="chk_conflict_incidents_status",
         ),
         CheckConstraint(
-            "decision IS NULL OR decision IN ('APPROVED', 'REJECTED')",
+            "decision IS NULL OR decision IN ('APPROVED', 'REJECTED') OR decision IN ('ACCEPT_SEQUENCE', 'REJECT_INVALID_EVENTS', 'REQUEST_CLARIFICATION', 'MARK_UNRESOLVED', 'ESCALATE_HR')",
             name="chk_conflict_incidents_decision",
         ),
         CheckConstraint(
@@ -849,12 +875,24 @@ class AttendanceConflictIncident(Base):
             name="chk_conflict_incidents_reason",
         ),
         CheckConstraint(
-            "(status = 'PENDING_REVIEW' AND decision IS NULL AND decided_at IS NULL AND reviewer_user_id IS NULL) OR "
-            "(status = 'APPROVED' AND decision = 'APPROVED' AND decided_at IS NOT NULL AND reviewer_user_id IS NOT NULL) OR "
-            "(status = 'REJECTED' AND decision = 'REJECTED' AND decided_at IS NOT NULL AND reviewer_user_id IS NOT NULL)",
+            "(status = 'PENDING_REVIEW' AND decision IS NULL) OR "
+            "(status = 'APPROVED' AND decision = 'APPROVED') OR "
+            "(status = 'REJECTED' AND decision = 'REJECTED') OR "
+            "(status = 'APPROVED' AND decision = 'ACCEPT_SEQUENCE') OR "
+            "(status = 'REJECTED' AND decision = 'REJECT_INVALID_EVENTS') OR "
+            "(status = 'NEEDS_CLARIFICATION' AND decision = 'REQUEST_CLARIFICATION') OR "
+            "(status = 'UNRESOLVED' AND decision = 'MARK_UNRESOLVED') OR "
+            "(status = 'ESCALATED_HR' AND decision = 'ESCALATE_HR') OR "
+            "(status = 'AUTO_RESOLVED' AND decision IS NULL)",
             name="chk_conflict_incidents_status_decision",
         ),
+        CheckConstraint(
+            "severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')",
+            name="chk_conflict_incidents_severity",
+        ),
         Index("ix_conflict_incidents_tenant_status", "tenant_id", "status"),
+        Index("ix_conflict_incidents_tenant_code", "tenant_id", "conflict_code"),
+        Index("ix_conflict_incidents_tenant_severity", "tenant_id", "severity"),
         Index("ix_conflict_incidents_tenant_employee", "tenant_id", "employee_id"),
         Index("ix_conflict_incidents_tenant_submitted", "tenant_id", "submitted_at"),
         Index("ix_conflict_incidents_tenant_decided", "tenant_id", "decided_at"),

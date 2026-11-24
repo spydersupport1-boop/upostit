@@ -11,6 +11,12 @@ class OfflineConflictIncidentModel {
   final String? rejectionSummary;
   final String? employeeNotes;
   final DateTime submittedAt;
+  final String? conflictCode;
+  final String severity;
+  final String classification;
+  final String? employeeClarification;
+  final DateTime? clarificationRequestedAt;
+  final DateTime? clarificationSubmittedAt;
   final String? decision;
   final String? decisionReason;
   final DateTime? decidedAt;
@@ -29,6 +35,12 @@ class OfflineConflictIncidentModel {
     this.rejectionSummary,
     this.employeeNotes,
     required this.submittedAt,
+    this.conflictCode,
+    this.severity = 'MEDIUM',
+    this.classification = 'NEEDS_MANAGER_REVIEW',
+    this.employeeClarification,
+    this.clarificationRequestedAt,
+    this.clarificationSubmittedAt,
     this.decision,
     this.decisionReason,
     this.decidedAt,
@@ -49,6 +61,16 @@ class OfflineConflictIncidentModel {
       rejectionSummary: json['rejection_summary'] as String?,
       employeeNotes: json['employee_notes'] as String?,
       submittedAt: DateTime.parse(json['submitted_at'] as String),
+      conflictCode: json['conflict_code'] as String?,
+      severity: (json['severity'] as String?) ?? 'MEDIUM',
+      classification: (json['classification'] as String?) ?? 'NEEDS_MANAGER_REVIEW',
+      employeeClarification: json['employee_clarification'] as String?,
+      clarificationRequestedAt: json['clarification_requested_at'] != null
+          ? DateTime.parse(json['clarification_requested_at'] as String)
+          : null,
+      clarificationSubmittedAt: json['clarification_submitted_at'] != null
+          ? DateTime.parse(json['clarification_submitted_at'] as String)
+          : null,
       decision: json['decision'] as String?,
       decisionReason: json['decision_reason'] as String?,
       decidedAt: json['decided_at'] != null

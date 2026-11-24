@@ -1120,11 +1120,27 @@ class OfflineConflictIncidentResponse(BaseModel):
     rejection_summary: str | None = None
     employee_notes: str | None = None
     submitted_at: datetime
+    conflict_code: str | None = None
+    severity: str | None = "MEDIUM"
+    classification: str | None = "NEEDS_MANAGER_REVIEW"
+    employee_clarification: str | None = None
+    clarification_requested_at: datetime | None = None
+    clarification_submitted_at: datetime | None = None
     decision: str | None = None
     decision_reason: str | None = None
     decided_at: datetime | None = None
     resolved_correction_event_ids: list[str] = Field(default_factory=list)
     idempotent_replay: bool = False
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def validate_severity_fallback(cls, v: Any) -> str:
+        return str(v) if v is not None else "MEDIUM"
+
+    @field_validator("classification", mode="before")
+    @classmethod
+    def validate_classification_fallback(cls, v: Any) -> str:
+        return str(v) if v is not None else "NEEDS_MANAGER_REVIEW"
 
 
 class EmployeeConflictIncidentSummary(BaseModel):
@@ -1142,10 +1158,26 @@ class EmployeeConflictIncidentSummary(BaseModel):
     rejection_summary: str | None = None
     employee_notes: str | None = None
     submitted_at: datetime
+    conflict_code: str | None = None
+    severity: str | None = "MEDIUM"
+    classification: str | None = "NEEDS_MANAGER_REVIEW"
+    employee_clarification: str | None = None
+    clarification_requested_at: datetime | None = None
+    clarification_submitted_at: datetime | None = None
     decision: str | None = None
     decision_reason: str | None = None
     decided_at: datetime | None = None
     resolved_events_count: int = 0
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def validate_summary_severity(cls, v: Any) -> str:
+        return str(v) if v is not None else "MEDIUM"
+
+    @field_validator("classification", mode="before")
+    @classmethod
+    def validate_summary_classification(cls, v: Any) -> str:
+        return str(v) if v is not None else "NEEDS_MANAGER_REVIEW"
 
 
 class EmployeeConflictIncidentListResponse(BaseModel):
@@ -1159,8 +1191,84 @@ class EmployeeConflictIncidentListResponse(BaseModel):
 
 
 # ==============================================================================
-# Phase 8 Milestone 8.3: Supervisor Conflict Adjudication & Queue Schemas
+# Phase 8 Milestone 8.3 & Phase 11.5: Multi-Device Conflict Adjudication Schemas
 # ==============================================================================
+
+
+class MultiDeviceConflictCode(StrEnum):
+    """Machine-readable conflict codes for multi-device attendance arbitration."""
+
+    OVERLAPPING_SESSIONS = "OVERLAPPING_SESSIONS"
+    DUPLICATE_CHECK_IN = "DUPLICATE_CHECK_IN"
+    UNPAIRED_CHECK_OUT = "UNPAIRED_CHECK_OUT"
+    MULTIPLE_CHECK_OUT = "MULTIPLE_CHECK_OUT"
+    OUT_OF_ORDER_SYNC = "OUT_OF_ORDER_SYNC"
+    CONFLICTING_OFFLINE_TIMESTAMPS = "CONFLICTING_OFFLINE_TIMESTAMPS"
+    POST_RECONCILIATION_ARRIVAL = "POST_RECONCILIATION_ARRIVAL"
+    UNAUTHORIZED_OR_REVOKED_DEVICE = "UNAUTHORIZED_OR_REVOKED_DEVICE"
+    IMPOSSIBLE_TRAVEL_TIMELINE = "IMPOSSIBLE_TRAVEL_TIMELINE"
+    CONCURRENT_SYNC_RACE = "CONCURRENT_SYNC_RACE"
+
+
+class ConflictSeverity(StrEnum):
+    """Severity classification for attendance conflict incidents."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class ConflictClassification(StrEnum):
+    """Actionability classification for multi-device attendance conflicts."""
+
+    AUTO_RESOLVABLE = "AUTO_RESOLVABLE"
+    NEEDS_EMPLOYEE_CLARIFICATION = "NEEDS_EMPLOYEE_CLARIFICATION"
+    NEEDS_MANAGER_REVIEW = "NEEDS_MANAGER_REVIEW"
+    INVALID_UNAUTHORIZED = "INVALID_UNAUTHORIZED"
+
+
+class ConflictIncidentStatus(StrEnum):
+    """Lifecycle status for attendance conflict incidents."""
+
+    PENDING_REVIEW = "PENDING_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
+    UNRESOLVED = "UNRESOLVED"
+    ESCALATED_HR = "ESCALATED_HR"
+    AUTO_RESOLVED = "AUTO_RESOLVED"
+
+
+class ConflictDecisionType(StrEnum):
+    """Decision actions for conflict adjudication."""
+
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    ACCEPT_SEQUENCE = "ACCEPT_SEQUENCE"
+    REJECT_INVALID_EVENTS = "REJECT_INVALID_EVENTS"
+    REQUEST_CLARIFICATION = "REQUEST_CLARIFICATION"
+    MARK_UNRESOLVED = "MARK_UNRESOLVED"
+    ESCALATE_HR = "ESCALATE_HR"
+
+
+class AttendanceConflictClarificationRequest(BaseModel):
+    """Payload submitted by an employee to clarify their punch timeline."""
+
+    clarification_notes: str = Field(
+        ...,
+        min_length=3,
+        max_length=2000,
+        description="Employee clarification regarding ambiguous punches",
+    )
+
+    @field_validator("clarification_notes")
+    @classmethod
+    def validate_notes(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 3:
+            raise ValueError("Clarification notes must contain at least 3 non-whitespace characters.")
+        return clean
 
 
 class AttendanceConflictDecisionRequest(BaseModel):
@@ -1168,7 +1276,7 @@ class AttendanceConflictDecisionRequest(BaseModel):
 
     action: str = Field(
         ...,
-        description="Decision action ('APPROVE' or 'REJECT')",
+        description="Decision action (APPROVE, REJECT, ACCEPT_SEQUENCE, REJECT_INVALID_EVENTS, REQUEST_CLARIFICATION, MARK_UNRESOLVED, ESCALATE_HR)",
     )
     reason: str = Field(
         ...,
@@ -1188,7 +1296,19 @@ class AttendanceConflictDecisionRequest(BaseModel):
             return "APPROVE"
         if clean in ("REJECT", "REJECTED"):
             return "REJECT"
-        raise ValueError(f"Invalid decision action '{v}'. Must be 'APPROVE' or 'REJECT'.")
+        if clean in (
+            "ACCEPT_SEQUENCE",
+            "REJECT_INVALID_EVENTS",
+            "REQUEST_CLARIFICATION",
+            "MARK_UNRESOLVED",
+            "ESCALATE_HR",
+        ):
+            return clean
+        raise ValueError(
+            f"Invalid decision action '{v}'. Must be one of APPROVE, REJECT, "
+            "ACCEPT_SEQUENCE, REJECT_INVALID_EVENTS, REQUEST_CLARIFICATION, "
+            "MARK_UNRESOLVED, ESCALATE_HR."
+        )
 
     @field_validator("reason")
     @classmethod
@@ -1219,11 +1339,27 @@ class SupervisorConflictQueueItem(BaseModel):
     rejection_summary: str | None = None
     employee_notes: str | None = None
     submitted_at: datetime
+    conflict_code: str | None = None
+    severity: str | None = "MEDIUM"
+    classification: str | None = "NEEDS_MANAGER_REVIEW"
+    employee_clarification: str | None = None
+    clarification_requested_at: datetime | None = None
+    clarification_submitted_at: datetime | None = None
     decision: str | None = None
     decision_reason: str | None = None
     reviewer_user_id: uuid.UUID | None = None
     decided_at: datetime | None = None
     resolved_correction_event_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def validate_queue_severity(cls, v: Any) -> str:
+        return str(v) if v is not None else "MEDIUM"
+
+    @field_validator("classification", mode="before")
+    @classmethod
+    def validate_queue_classification(cls, v: Any) -> str:
+        return str(v) if v is not None else "NEEDS_MANAGER_REVIEW"
 
 
 class SupervisorConflictQueueListResponse(BaseModel):
@@ -1267,6 +1403,12 @@ class AttendanceConflictIncidentDetailResponse(BaseModel):
     rejection_summary: str | None = None
     employee_notes: str | None = None
     submitted_at: datetime
+    conflict_code: str | None = None
+    severity: str | None = "MEDIUM"
+    classification: str | None = "NEEDS_MANAGER_REVIEW"
+    employee_clarification: str | None = None
+    clarification_requested_at: datetime | None = None
+    clarification_submitted_at: datetime | None = None
     assigned_reviewer_id: uuid.UUID | None = None
     decision: str | None = None
     decision_reason: str | None = None
@@ -1276,6 +1418,16 @@ class AttendanceConflictIncidentDetailResponse(BaseModel):
     metadata_json: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def validate_detail_severity(cls, v: Any) -> str:
+        return str(v) if v is not None else "MEDIUM"
+
+    @field_validator("classification", mode="before")
+    @classmethod
+    def validate_detail_classification(cls, v: Any) -> str:
+        return str(v) if v is not None else "NEEDS_MANAGER_REVIEW"
 
 
 class AttendanceConflictDecisionResponse(BaseModel):

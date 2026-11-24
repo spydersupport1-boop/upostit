@@ -31,7 +31,16 @@ export default function ConflictIncidentDetailModal({
   const [error, setError] = useState<string | null>(null);
 
   // Adjudication form state
-  const [decisionAction, setDecisionAction] = useState<"APPROVE" | "REJECT" | null>(null);
+  const [decisionAction, setDecisionAction] = useState<
+    | "APPROVE"
+    | "REJECT"
+    | "ACCEPT_SEQUENCE"
+    | "REJECT_INVALID_EVENTS"
+    | "REQUEST_CLARIFICATION"
+    | "MARK_UNRESOLVED"
+    | "ESCALATE_HR"
+    | null
+  >(null);
   const [decisionReason, setDecisionReason] = useState<string>("");
   const [overrideLocationId, setOverrideLocationId] = useState<string>("");
   const [locations, setLocations] = useState<LocationDto[]>([]);
@@ -256,6 +265,68 @@ export default function ConflictIncidentDetailModal({
                 </div>
               </div>
             </div>
+
+            {/* Phase 11.5 Conflict Code, Severity, and Classification */}
+            <div
+              style={{
+                display: "flex",
+                gap: "0.75rem",
+                flexWrap: "wrap",
+                alignItems: "center",
+                background: "rgba(255, 255, 255, 0.02)",
+                padding: "0.75rem 1rem",
+                borderRadius: "8px",
+                border: "1px solid var(--border-color)",
+              }}
+            >
+              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                Conflict Classification:
+              </div>
+              <span className="badge badge-yellow" style={{ fontFamily: "monospace", fontWeight: 700 }}>
+                {incident.conflict_code || "SEQUENCE_CONFLICT"}
+              </span>
+              <span
+                className={`badge ${
+                  incident.severity === "CRITICAL"
+                    ? "badge-red"
+                    : incident.severity === "HIGH"
+                    ? "badge-yellow"
+                    : "badge"
+                }`}
+                style={{ fontWeight: 700 }}
+              >
+                Severity: {incident.severity || "MEDIUM"}
+              </span>
+              <span className="badge badge-purple">
+                {incident.classification || "NEEDS_MANAGER_REVIEW"}
+              </span>
+            </div>
+
+            {/* Employee Clarification (if submitted) */}
+            {incident.employee_clarification && (
+              <div
+                style={{
+                  background: "rgba(16, 185, 129, 0.08)",
+                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                  borderRadius: "8px",
+                  padding: "0.85rem 1.25rem",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.8rem", color: "#34d399", fontWeight: 700 }}>
+                    💬 Employee Clarification:
+                  </span>
+                  {incident.clarification_submitted_at && (
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      Submitted {formatTimestamp(incident.clarification_submitted_at)}
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: "0.9rem", marginTop: "0.35rem", color: "var(--text-primary)" }}>
+                  {incident.employee_clarification}
+                </p>
+              </div>
+            )}
 
             {/* Employee Explanation Notes (if any) */}
             {incident.employee_notes && (
@@ -489,28 +560,57 @@ export default function ConflictIncidentDetailModal({
                     <div>
                       <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>Supervisor Adjudication</div>
                       <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                        Approving will insert atomic correction events and recalculate timesheets.
+                        Select resolution action. Approval creates audited correction events and recalculates daily timesheets.
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: "0.75rem" }}>
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                       <button
-                        className="btn btn-danger"
+                        className="btn btn-secondary btn-sm"
                         onClick={() => {
-                          setDecisionAction("REJECT");
+                          setDecisionAction("REQUEST_CLARIFICATION");
                           setDecisionError(null);
                         }}
                       >
-                        Reject Conflict
+                        Request Clarification
                       </button>
                       <button
-                        className="btn btn-primary"
-                        style={{ background: "#059669", borderColor: "#059669" }}
+                        className="btn btn-secondary btn-sm"
+                        style={{ color: "#f97316", borderColor: "rgba(249, 115, 22, 0.4)" }}
                         onClick={() => {
-                          setDecisionAction("APPROVE");
+                          setDecisionAction("MARK_UNRESOLVED");
                           setDecisionError(null);
                         }}
                       >
-                        Approve Conflict
+                        Mark Unresolved
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                        onClick={() => {
+                          setDecisionAction("ESCALATE_HR");
+                          setDecisionError(null);
+                        }}
+                      >
+                        Escalate HR
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => {
+                          setDecisionAction("REJECT_INVALID_EVENTS");
+                          setDecisionError(null);
+                        }}
+                      >
+                        Reject Events
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ background: "#059669", borderColor: "#059669" }}
+                        onClick={() => {
+                          setDecisionAction("ACCEPT_SEQUENCE");
+                          setDecisionError(null);
+                        }}
+                      >
+                        Accept Sequence
                       </button>
                     </div>
                   </div>
@@ -535,10 +635,13 @@ export default function ConflictIncidentDetailModal({
                         <span
                           style={{
                             fontWeight: 700,
-                            color: decisionAction === "APPROVE" ? "#34d399" : "#f87171",
+                            color:
+                              decisionAction === "APPROVE" || decisionAction === "ACCEPT_SEQUENCE"
+                                ? "#34d399"
+                                : "#f87171",
                           }}
                         >
-                          Confirm {decisionAction === "APPROVE" ? "Approval" : "Rejection"}
+                          Confirm Action: {decisionAction}
                         </span>
                         <button
                           type="button"
@@ -563,11 +666,7 @@ export default function ConflictIncidentDetailModal({
                           required
                           rows={3}
                           className="form-control"
-                          placeholder={
-                            decisionAction === "APPROVE"
-                              ? "Explain reason for approving (e.g., Verified working on-site, network outage confirmed)..."
-                              : "Explain reason for rejection (e.g., Telemetry invalid, punch does not match security log)..."
-                          }
+                          placeholder="Explain reason for this decision (minimum 3 characters)..."
                           value={decisionReason}
                           onChange={(e) => setDecisionReason(e.target.value)}
                         />
@@ -585,7 +684,7 @@ export default function ConflictIncidentDetailModal({
                         </div>
                       </div>
 
-                      {decisionAction === "APPROVE" && locations.length > 0 && (
+                      {(decisionAction === "APPROVE" || decisionAction === "ACCEPT_SEQUENCE") && locations.length > 0 && (
                         <div className="form-group" style={{ marginTop: "0.75rem" }}>
                           <label className="form-label">Workplace Location Override (Optional)</label>
                           <select

@@ -91,6 +91,20 @@ class SyncSubmitConflictBundleRequested extends SyncEvent {
   List<Object?> get props => [bundleId, employeeNotes];
 }
 
+/// Dispatched by the employee submitting clarification notes on an incident in NEEDS_CLARIFICATION status.
+class SyncSubmitConflictClarificationRequested extends SyncEvent {
+  final String incidentId;
+  final String clarificationNotes;
+
+  const SyncSubmitConflictClarificationRequested({
+    required this.incidentId,
+    required this.clarificationNotes,
+  });
+
+  @override
+  List<Object?> get props => [incidentId, clarificationNotes];
+}
+
 /// Dispatched to refresh conflict review status from GET /offline-conflicts/my.
 class SyncRefreshConflictStatusRequested extends SyncEvent {
   final String? tenantId;
