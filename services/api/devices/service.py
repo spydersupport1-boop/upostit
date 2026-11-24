@@ -15,7 +15,9 @@ from services.api.devices.models import Device
 from services.api.devices.schemas import (
     DeviceRegisterRequest,
     DeviceRegistrationResponse,
+    DeviceReRegisterRequest,
     DeviceResponse,
+    DeviceSecurityStatusResponse,
     DeviceStatusResponse,
 )
 from services.api.employees.models import Employee
@@ -517,3 +519,70 @@ async def validate_device_for_punch(
         device_model=device.device_model,
         reason=f"Device has invalid status '{device.status}'.",
     )
+
+
+async def get_device_security_status(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    employee_id: uuid.UUID,
+) -> DeviceSecurityStatusResponse:
+    """Retrieves full device security posture including revocation details for the employee."""
+    import sqlalchemy as sa
+
+    stmt = (
+        select(Device)
+        .where(
+            Device.tenant_id == tenant_id,
+            Device.employee_id == employee_id,
+        )
+        .order_by(
+            sa.case(
+                (Device.status == "ACTIVE", 1),
+                (Device.status == "PENDING_APPROVAL", 2),
+                (Device.status == "REVOKED", 3),
+                else_=4,
+            ),
+            Device.updated_at.desc(),
+        )
+        .limit(1)
+    )
+    device = (await session.execute(stmt)).scalar_one_or_none()
+    if device is None:
+        return DeviceSecurityStatusResponse(
+            is_bound=False,
+            status="UNBOUND",
+            is_revoked=False,
+        )
+
+    is_revoked = device.status in ("REVOKED", "BLOCKED")
+    return DeviceSecurityStatusResponse(
+        is_bound=(device.status == "ACTIVE"),
+        status=device.status,
+        is_revoked=is_revoked,
+        revoked_at=device.revoked_at,
+        revocation_reason=device.revocation_reason,
+        platform=device.platform,
+        device_model=device.device_model,
+        registered_at=device.registered_at,
+        encryption_algorithm_supported="SQLCIPHER_PAGE_AES256",
+        min_app_version="1.0.0",
+    )
+
+
+async def re_register_device(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    payload: DeviceReRegisterRequest,
+) -> DeviceRegistrationResponse:
+    """Re-registers a device following security reset, key recovery, or hardware replacement."""
+    reg_req = DeviceRegisterRequest(
+        device_id=payload.device_id,
+        platform=payload.platform,
+        device_model=payload.device_model,
+        os_name=payload.os_name,
+        os_version=payload.os_version,
+        app_version=payload.app_version,
+        metadata={"re_registration_reason": payload.re_registration_reason},
+    )
+    return await register_device(session, tenant_id, employee_id, reg_req)

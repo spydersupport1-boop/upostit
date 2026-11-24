@@ -134,3 +134,43 @@ class DeviceStatusResponse(BaseModel):
     status: str | None = None
     device: DeviceResponse | None = None
 
+
+class DeviceSecurityStatusResponse(BaseModel):
+    """Device security posture and offline encryption metadata."""
+
+    is_bound: bool
+    status: str
+    is_revoked: bool
+    revoked_at: datetime | None = None
+    revocation_reason: str | None = None
+    platform: str | None = None
+    device_model: str | None = None
+    registered_at: datetime | None = None
+    encryption_algorithm_supported: str = "SQLCIPHER_PAGE_AES256"
+    min_app_version: str = "1.0.0"
+
+
+class DeviceReRegisterRequest(BaseModel):
+    """Payload to safely re-register a mobile device after hardware key wipe or replacement."""
+
+    device_id: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="New or re-initialized device hardware identifier.",
+    )
+    platform: DevicePlatform = Field(
+        ...,
+        description="Operating system platform.",
+    )
+    re_registration_reason: str = Field(
+        ...,
+        min_length=3,
+        max_length=500,
+        description="Reason for re-registration (e.g. OS upgrade, key wipe, factory reset).",
+    )
+    device_model: str | None = None
+    os_name: str | None = None
+    os_version: str | None = None
+    app_version: str | None = None
+

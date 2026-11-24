@@ -19,15 +19,19 @@ from services.api.devices.schemas import (
     DeviceRegisterRequest,
     DeviceRegistrationResponse,
     DeviceReplacementApprovalRequest,
+    DeviceReRegisterRequest,
     DeviceResponse,
     DeviceRevokeRequest,
+    DeviceSecurityStatusResponse,
     DeviceStatusResponse,
 )
 from services.api.devices.service import (
     approve_device_replacement,
     get_device_by_id,
+    get_device_security_status,
     get_employee_device_status,
     list_devices,
+    re_register_device,
     register_device,
     revoke_device,
 )
@@ -94,6 +98,55 @@ async def get_my_device_status_endpoint(
         tenant_id=ctx.tenant.id,
         employee_id=emp.id,
     )
+
+
+@router.get(
+    "/security-status",
+    response_model=DeviceSecurityStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Device Security Status",
+    description="Returns device security posture, revocation status, and encryption parameters.",
+)
+async def get_device_security_status_endpoint(
+    ctx: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DeviceSecurityStatusResponse:
+    emp_stmt = select(Employee).where(
+        Employee.tenant_id == ctx.tenant.id,
+        Employee.user_id == ctx.user.id,
+    )
+    emp = (await db.execute(emp_stmt)).scalar_one_or_none()
+    if emp is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user has no employee profile.",
+        )
+    return await get_device_security_status(db, ctx.tenant.id, emp.id)
+
+
+@router.post(
+    "/re-register",
+    response_model=DeviceRegistrationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Re-Register Device",
+    description="Re-registers a mobile device following key wipe, recovery, or hardware replacement.",
+)
+async def re_register_device_endpoint(
+    payload: DeviceReRegisterRequest,
+    ctx: Annotated[AuthenticatedContext, Depends(get_authenticated_context)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DeviceRegistrationResponse:
+    emp_stmt = select(Employee).where(
+        Employee.tenant_id == ctx.tenant.id,
+        Employee.user_id == ctx.user.id,
+    )
+    emp = (await db.execute(emp_stmt)).scalar_one_or_none()
+    if emp is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user has no employee profile.",
+        )
+    return await re_register_device(db, ctx.tenant.id, emp.id, payload)
 
 
 @router.get(

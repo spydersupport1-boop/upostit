@@ -245,7 +245,7 @@ flowchart TD
 
 ---
 
-### Milestone 11.6 — Offline Data Security, Key Lifecycle Recovery & Local Queue Eviction
+### Milestone 11.6 — Offline Data Security, Key Lifecycle Recovery & Local Queue Eviction (COMPLETED & VERIFIED)
 - **Objective**: Harden local SQLCipher encryption against hardware Keystore invalidation, implement scheduled eviction of aged synced events, and audit tamper-resistance.
 - **Scope**:
   - Implement graceful recovery in `DatabaseKeyProvider` and `LocalQueueDatabase` if platform Keystore invalidates the database key (e.g., passcode reset).

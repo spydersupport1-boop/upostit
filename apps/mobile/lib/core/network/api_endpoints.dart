@@ -34,6 +34,8 @@ class ApiEndpoints {
 
   // Device routes (/api/v1/devices)
   static const String devicesRegister = '/api/v1/devices/register';
+  static const String devicesReRegister = '/api/v1/devices/re-register';
+  static const String devicesSecurityStatus = '/api/v1/devices/security-status';
   static const String devicesMe = '/api/v1/devices/me';
 
   // Leave routes (/api/v1/leave)
